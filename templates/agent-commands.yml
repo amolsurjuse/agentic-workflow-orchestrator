@@ -1,0 +1,48 @@
+# Agent Commands Reference
+# Agents must read this file before running terminal commands.
+
+paths:
+  root: "."
+  docs: "./docs"
+  agent_work: "./agentWork"
+  agents: "./.github/agents"
+
+venv:
+  activate: "source .venv/bin/activate"
+  verify: "python --version"
+
+install:
+  all: "make setup"
+  backend: "mvn clean install -DskipTests"
+  frontend: "npm install"
+
+build:
+  all: "make build"
+  backend: "mvn clean package -DskipTests"
+  frontend: "npm run build"
+
+test:
+  all: "make test"
+  backend: "mvn clean test"
+  frontend: "npm run test"
+  integration: "mvn verify -Pintegration"
+  e2e: "npm run test:e2e"
+
+lint:
+  all: "make lint"
+  backend: "mvn checkstyle:check"
+  frontend: "npm run lint"
+
+security:
+  dependency_check: "mvn org.owasp:dependency-check-maven:check"
+  npm_audit: "npm audit"
+  secrets_scan: "gitleaks detect --source ."
+
+deploy:
+  staging: "make deploy-staging"
+  production: "make deploy-production"
+
+db:
+  migrate: "mvn flyway:migrate"
+  rollback: "mvn flyway:undo"
+  status: "mvn flyway:info"
