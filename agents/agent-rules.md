@@ -105,23 +105,10 @@ Jira read/write actions use the Atlassian MCP server.
 - Call `getAccessibleAtlassianResources` only if default cloudId fails.
 - Always pass `responseContentFormat: "markdown"` when reading issues.
 
-**VS Code MCP setup**: The Atlassian MCP server must be registered in `.vscode/mcp.json` (NOT in `settings.json`):
-```json
-{
-  "servers": {
-    "atlassian": {
-      "type": "http",
-      "url": "https://mcp.atlassian.com/v1/mcp"
-    }
-  }
-}
-```
-This file is installed automatically by `setup-agents.sh`. If Jira MCP is unavailable, verify `.vscode/mcp.json` exists in the project root and restart VS Code.
-
 **Behavioral rules:**
 - For Jira pull/read requests, do NOT run terminal readiness checks — Jira MCP does not use the terminal.
 - If MCP tools are discovered but a call fails, report the failure as a Jira MCP request error (auth/permission/network), not "tools unavailable."
-- Do not add MCP tool names (e.g. `atlassian/getJiraIssue`) to `tools:` frontmatter — MCP tools are discovered at runtime by function name only.
+- Jira-capable agents must include Jira tool names in `tools:` allowlists (function names and/or prefixed variants), otherwise Jira MCP appears unavailable.
 - Do not suggest "enable terminal tools" when Jira MCP is the required path.
 - `f1.workspace-prep` fallback: if Jira MCP is unavailable/fails, ask user for a brief description and continue (do not hard-stop).
 - For Jira-only utility actions (`j.jira-creator pull KAN-3`): if MCP is not connected, emit Rule 5 hard-stop only.

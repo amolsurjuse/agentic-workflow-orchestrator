@@ -10,7 +10,8 @@
 #   4. Copies references into <target>/.github/agents/references/
 #   5. Copies templates/agent-commands.yml to <target>/docs/ (if not exists)
 #   6. Creates /agentWork/ directory for agent outputs
-#   7. Adds .github/agents/ and agentWork/ to <target>/.gitignore (idempotent)
+#   7. Copies .vscode/mcp.json into <target>/.vscode/ (Atlassian MCP config)
+#   8. Adds .github/agents/ and agentWork/ to <target>/.gitignore (idempotent)
 #
 # Usage:
 #   cd /path/to/your-project
@@ -50,7 +51,7 @@ if [ ! -d "$TARGET_DIR" ]; then
 fi
 
 # ── Step 1: Clean legacy orchestrator artifacts ──
-echo "[1/8] Cleaning legacy orchestrator artifacts..."
+echo "[1/9] Cleaning legacy orchestrator artifacts..."
 AGENTS_DEST="$TARGET_DIR/.github/agents"
 mkdir -p "$AGENTS_DEST"
 
@@ -88,7 +89,7 @@ fi
 echo ""
 
 # ── Step 2: Copy .agent.md files + agent-rules.md ──
-echo "[2/8] Copying agent definitions (.agent.md + rules)..."
+echo "[2/9] Copying agent definitions (.agent.md + rules)..."
 COUNT=0
 for f in "$REPO_DIR/.github/agents"/*.agent.md; do
     [ -f "$f" ] || continue
@@ -108,7 +109,7 @@ echo "      Copied $COUNT agent files + rules"
 echo ""
 
 # ── Step 3: Copy SKILL.md files ──
-echo "[3/8] Copying skill definitions (SKILL.md)..."
+echo "[3/9] Copying skill definitions (SKILL.md)..."
 SKILLS_DEST="$TARGET_DIR/.github/agents/skills"
 mkdir -p "$SKILLS_DEST"
 
@@ -132,7 +133,7 @@ echo "      Copied $SKILL_COUNT skill files"
 echo ""
 
 # ── Step 4: Copy references ──
-echo "[4/8] Copying references..."
+echo "[4/9] Copying references..."
 REFS_DEST="$TARGET_DIR/.github/agents/references"
 mkdir -p "$REFS_DEST"
 
@@ -147,7 +148,7 @@ echo "      Copied $REF_COUNT reference files"
 echo ""
 
 # ── Step 5: Copy templates ──
-echo "[5/8] Copying templates..."
+echo "[5/9] Copying templates..."
 TEMPLATES_DEST="$TARGET_DIR/.ai"
 mkdir -p "$TEMPLATES_DEST"
 
@@ -166,7 +167,7 @@ echo "      Copied $TPL_COUNT template files"
 echo ""
 
 # ── Step 6: Copy agent-commands.yml template ──
-echo "[6/8] Setting up docs/agent-commands.yml..."
+echo "[6/9] Setting up docs/agent-commands.yml..."
 COMMANDS_FILE="$TARGET_DIR/docs/agent-commands.yml"
 if [ -f "$COMMANDS_FILE" ]; then
     echo "      agent-commands.yml already exists — skipping"
@@ -203,13 +204,32 @@ fi
 echo ""
 
 # ── Step 7: Create agentWork directory ──
-echo "[7/8] Creating agentWork directory..."
+echo "[7/9] Creating agentWork directory..."
 mkdir -p "$TARGET_DIR/agentWork"
 echo "      Created /agentWork/ for agent output persistence"
 echo ""
 
-# ── Step 8: Ensure .gitignore contains generated paths ──
-echo "[8/8] Updating .gitignore with generated paths..."
+# ── Step 8: Copy .vscode/mcp.json (Atlassian MCP Server config) ──
+echo "[8/9] Setting up .vscode/mcp.json (Atlassian MCP Server)..."
+VSCODE_DEST="$TARGET_DIR/.vscode"
+MCP_SRC="$REPO_DIR/.vscode/mcp.json"
+MCP_DEST="$VSCODE_DEST/mcp.json"
+
+if [ ! -f "$MCP_SRC" ]; then
+    echo "      WARNING: $MCP_SRC not found — skipping MCP config"
+elif [ -f "$MCP_DEST" ]; then
+    echo "      .vscode/mcp.json already exists — skipping"
+    echo "      (ensure it contains an 'atlassian' server entry)"
+else
+    mkdir -p "$VSCODE_DEST"
+    cp "$MCP_SRC" "$MCP_DEST"
+    echo "      Created .vscode/mcp.json with Atlassian MCP Server config"
+    echo "      URL: https://mcp.atlassian.com/v1/mcp"
+fi
+echo ""
+
+# ── Step 9: Ensure .gitignore contains generated paths ──
+echo "[9/9] Updating .gitignore with generated paths..."
 GITIGNORE_FILE="$TARGET_DIR/.gitignore"
 touch "$GITIGNORE_FILE"
 
@@ -242,6 +262,7 @@ echo "    .github/agents/references/     $REF_COUNT reference files"
 echo "    .ai/                           $TPL_COUNT templates (without agent-commands.yml)"
 echo "    docs/agent-commands.yml        command reference"
 echo "    agentWork/                     output directory"
+echo "    .vscode/mcp.json               Atlassian MCP Server config"
 echo "    .gitignore                     generated paths ensured"
 echo ""
 echo "  Installed agents:"
