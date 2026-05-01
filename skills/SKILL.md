@@ -1,17 +1,19 @@
 ---
 name: agentic-workflow-orchestrator
-description: Screenshot-aligned orchestration system for workspace prep, intake, planning, implementation, validation, review, documentation, and shipping with utility/domain agents.
+description: ElectraHub-tuned orchestration system for launch readiness, story shaping, impact mapping, delivery architecture, change building, verification, risk review, release notes, and shipping across EV charging services, clients, OCPP, OCPI, pricing, billing, and Kubernetes operations.
 ---
 
-# Agentic Workflow Orchestrator
+# ElectraHub Agentic Workflow Orchestrator
+
+Use this workflow for ElectraHub application delivery. Agents should keep EV charging domain context active: charger/OCPP behavior, OCPI roaming contracts, connector/session state, tariffs, payment/CDR correctness, admin/driver/iOS clients, RBAC/tenant boundaries, and Kubernetes/config governance.
 
 ## Feature Flow
-`f1.workspace-prep -> f2.intake -> f3.repo-understanding -> f4.planner -> f5.implementer -> f6.validator -> f7.code-reviewer -> f8.quality-implementer -> f9.documentarian -> f10.shipper`
+`01-launchpad -> 02-story-forger -> 03-impact-mapper -> 04-delivery-architect -> 05-change-builder -> 06-verification-runner -> 07-risk-reviewer -> 08-quality-hardener -> 09-release-scribe -> 10-release-conductor`
 
 ## Utility Agents
-- `f0.repo-commands`
-- `j.jira-creator`
-- `a1.c4-diagram-generator`
-- `r1.quality-analyzer`, `r2.refactor-planner`
-- `t1.coverage-analyzer`
-- `m1.agent-update-planner`, `m2.agent-updater`, `m3.k8s-resource-advisor`
+- `00-command-cartographer`
+- `02a-jira-steward`
+- `20-system-cartographer`
+- `30-refactor-scout`, `31-refactor-designer`
+- `40-coverage-sentinel`
+- `90-agent-governor`, `91-instruction-editor`, `92-k8s-capacity-advisor`

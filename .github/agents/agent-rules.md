@@ -2,13 +2,38 @@
 
 This file contains shared rules that apply to **ALL agents** in the workflow. Each agent MUST follow these rules.
 
-**Reference this file**: Include `@agent-rules.md` in your context or read this file at the start of execution.
+**Reference this file**: Include `.agent-rules.md` in your context or read this file at the start of execution.
 
-> ⚠️ **FOR AGENTS**: You were directed here by Step 0 of your workflow. Read this ENTIRE file now. Every numbered rule below applies to you unless the "Applies to" line explicitly excludes your agent type.
+> **FOR AGENTS**: You were directed here by Step 0 of your workflow. Read this ENTIRE file now. Every numbered rule below applies to you unless the "Applies to" line explicitly excludes your agent type.
 
-> 📁 **PATH CONVENTION**: All paths in agent files that begin with `/` (for example `/agentWork/...`, `/docs/agent-commands.yml`) are relative to the workspace root directory (top-level folder open in the editor). Always resolve paths from the workspace root.
+> **PATH CONVENTION**: All paths in agent files that begin with `/` (for example `/agentWork/...`, `/docs/agent-commands.yml`) are relative to the workspace root directory (top-level folder open in the editor). Always resolve paths from the workspace root.
 
 ---
+
+## ElectraHub Application Context (MANDATORY)
+
+**Applies to**: All agents
+
+This orchestrator is tuned for **ElectraHub**, an EV charging platform. Treat every feature, review, test plan, Jira story, and PR as part of ElectraHub unless the user explicitly says otherwise.
+
+### Product/domain assumptions
+- Domain: EV charging, charger operations, driver experience, partner roaming, billing, pricing, payments, and station administration.
+- Core flows: driver onboarding, charger discovery, connector availability, session start/stop, live session telemetry, tariff display, payment capture, CDR generation, operator/admin workflows, and roaming interoperability.
+- Protocols to consider whenever relevant: OCPP for charger/device communication, OCPI for roaming and partner integrations, REST/GraphQL for internal APIs, WebSocket/SSE for live status and telemetry.
+- Key entities: Location, Station, Charger/Charge Point, EVSE, Connector, Tariff/Price Plan, Session, CDR, Driver/User, Operator/Tenant, RFID/token, Payment, Invoice, Meter Value, Status Notification.
+
+### Expected technical landscape
+- Backend work is typically Java/Spring Boot microservices with Maven, database migrations, DTO/entity/service layers, REST clients, config keys, and operational logging.
+- Frontend work may touch Angular/React admin or driver portal flows.
+- Mobile work may touch iOS driver app flows.
+- Infrastructure work may touch Kubernetes manifests/config, secrets, service discovery, observability, and rollout safety.
+
+### ElectraHub delivery rules
+- Always state whether OCPP, OCPI, pricing/tariff, payment, session, connector status, RBAC, or tenant/operator boundaries are impacted.
+- When a story touches charging behavior, include at least one concrete scenario using ElectraHub domain language, for example connector status transitions, remote start/stop, tariff lookup failure, CDR generation, or OCPI peer payload compatibility.
+- For backend config changes, call out Kubernetes/config governance and secret handling.
+- For user-facing changes, identify the affected ElectraHub client surface: admin portal, driver portal, iOS app, partner/OCPI API, or charger/OCPP integration.
+- Do not leave generic placeholders such as "service/module" or "business outcome" unresolved when ElectraHub-specific names can be inferred from the Jira story or repository context.
 
 ## 0. Agent Identification (MANDATORY)
 
@@ -17,36 +42,43 @@ This file contains shared rules that apply to **ALL agents** in the workflow. Ea
 As the very first action when you begin execution, print this banner before any diagnostics, searches, or tool checks:
 
 ```text
-🤖 Agent: <your name: field from frontmatter>
-📋 Description: <your description: field from frontmatter>
-🕐 Started: <YYYY-MM-DDTHH:mm:ss UTC>
+AGENT_NAME=<your name: field from frontmatter>
+AGENT_DESCRIPTION=<your description: field from frontmatter>
+AGENT_STARTED=<YYYY-MM-DDTHH:mm:ss UTC>
 ```
 
 If you are a domain subagent invoked via domain routing, also include:
 
 ```text
-↪️ Invoked by: <primary agent>
-📁 Domain: <domain>
+AGENT_INVOKED_BY=<primary agent>
+AGENT_DOMAIN=<domain>
 ```
 
 ---
 
-## 1. Pre-Check: Verify Workspace Prep (MANDATORY)
+## 1. Pre-Check: Verify Launchpad (MANDATORY)
 
-**Applies to**: All agents except `f1.workspace-prep`
+**Applies to**: All agents except `01-launchpad`
 
 ### Scope
-This pre-check applies to **Feature flow (`f*`) agents only**. Architecture (`a*`), Refactor (`r*`), Test Coverage (`t*`), and Meta (`m*`) agents invoked directly by the user may proceed without workspace-prep verification.
+This pre-check applies to the ElectraHub feature delivery agents only. Architecture, refactor, coverage, and meta utility agents invoked directly by the user may proceed without 01-launchpad verification.
 
-Before doing ANY other work, read the latest `/agentWork/<JIRA_KEY>/f1.workspace-prep.out.*.md` and verify:
-- The JIRA key in the handoff matches the workspace-prep output
-- Workspace status shows `✅ Workspace is ready for feature work`
+Before doing ANY other work, read the latest `/agentWork/<WORK_ID>/01-launchpad.out.*.md` and verify:
+- The work id in the handoff matches the 01-launchpad output
+- Workspace status shows `[OK] Workspace is ready for feature work`
 
 **If verification fails:**
 1. **STOP IMMEDIATELY** — do not proceed
-2. **Do NOT create `f1.workspace-prep.out.*.md` yourself** — only `f1.workspace-prep` can do this
-3. **Do NOT fake or simulate workspace prep**
-4. **Hand off to `f1.workspace-prep`** or inform the user to run it first
+2. **Do NOT create `01-launchpad.out.*.md` yourself** — only `01-launchpad` can do this
+3. **Do NOT fake or simulate 01-launchpad preparation**
+4. **Hand off to `01-launchpad`** or inform the user to run it first
+
+### Work ID
+Every run must have a `WORK_ID`.
+- If the input contains a Jira key, use that exact key as `WORK_ID`.
+- If the input contains only a requirement description, generate `WORK_ID` as `REQ-<YYYYMMDD>-<slug>` using the current date and a concise kebab-case slug from the description.
+- Use `WORK_ID` consistently for `/agentWork/<WORK_ID>/...`, branch names, handoffs, and output headers.
+- Never block the workflow only because a Jira key is missing when a usable requirement description is present.
 
 ---
 
@@ -58,10 +90,10 @@ Before running ANY terminal commands, read `/docs/agent-commands.yml` to find th
 
 - **If file exists**: Use the commands defined there
 - **If file NOT found**:
-  - For `f1.workspace-prep`: Run `f0.repo-commands` subagent to create it
+  - For `01-launchpad`: Run `00-command-cartographer` subagent to create it
   - For other agents: Ask the user: `I couldn't find /docs/agent-commands.yml. What commands should I use?`
 
-When `f0.repo-commands` is used, it must:
+When `00-command-cartographer` is used, it must:
 1. Create proposed mappings in `/docs/agent-commands.yml`
 2. Pause for user review/approval
 3. Continue only after explicit user approval
@@ -86,7 +118,7 @@ Use this fixed flow to reduce token usage and avoid repeated repo discovery:
 3. Use only these canonical paths during flow:
    - `/.github/agents/`
    - `/docs/agent-commands.yml`
-   - `/agentWork/<JIRA_KEY>/`
+   - `/agentWork/<WORK_ID>/`
 4. Keep one working directory per run:
    - Do not bounce between directories with repeated `cd`.
    - For file commands (`vim`, `cat`, `ls`, edits), use paths under the same root.
@@ -123,8 +155,8 @@ This file is installed automatically by `setup-agents.sh`. If Jira MCP is unavai
 - If MCP tools are discovered but a call fails, report the failure as a Jira MCP request error (auth/permission/network), not "tools unavailable."
 - Do not add MCP tool names (e.g. `atlassian/getJiraIssue`) to `tools:` frontmatter — MCP tools are discovered at runtime by function name only.
 - Do not suggest "enable terminal tools" when Jira MCP is the required path.
-- `f1.workspace-prep` fallback: if Jira MCP is unavailable/fails, ask user for a brief description and continue (do not hard-stop).
-- For Jira-only utility actions (`j.jira-creator pull KAN-3`): if MCP is not connected, emit Rule 5 hard-stop only.
+- `01-launchpad` fallback: if Jira MCP is unavailable/fails, ask user for a brief description and continue (do not hard-stop).
+- For Jira-only utility actions (`02a-jira-steward pull KAN-3`): if MCP is not connected, emit Rule 5 hard-stop only.
 - Do not return fallback option menus for Jira pull requests.
 
 ---
@@ -162,7 +194,7 @@ After activation, commands like `python`, `pip`, `pytest` should use the active 
 **Applies to**: All agents
 
 All agents MUST save output to:
-`/agentWork/<JIRA_KEY>/<agentName>.out.<RUN>.md`
+`/agentWork/<WORK_ID>/<agentName>.out.<RUN>.md`
 
 ### Run Number Logic
 - **Handoff from lower node**: Use same run number
@@ -189,13 +221,13 @@ Invocation: "<exact invocation prompt>"
 
 **Applies to**: All agents — **NO EXCEPTIONS**
 
-⚠️ This is a HARD STOP rule.
+This is a HARD STOP rule.
 
 If you encounter any environment issue, you MUST:
 1. STOP immediately
 2. Do NOT attempt workarounds
 3. Escalate to user with:
-   `⚠️ Environment issue encountered: [describe issue]. Please resolve and re-run.`
+   `Environment issue encountered: [describe issue]. Please resolve and re-run.`
 
 ### What counts as an environment issue
 - File read/write failures
@@ -217,16 +249,16 @@ If you encounter any environment issue, you MUST:
 **Applies to**: All agents (Node 2+)
 
 Read previous outputs to understand context:
-- `/agentWork/<JIRA_KEY>/f1.workspace-prep.out.*.md`
-- `/agentWork/<JIRA_KEY>/f2.intake.out.*.md`
-- `/agentWork/<JIRA_KEY>/f3.repo-understanding.out.*.md`
-- `/agentWork/<JIRA_KEY>/f4.planner.out.*.md`
-- `/agentWork/<JIRA_KEY>/f5.implementer.out.*.md`
-- `/agentWork/<JIRA_KEY>/f6.validator.out.*.md`
-- `/agentWork/<JIRA_KEY>/f7.code-reviewer.out.*.md`
-- `/agentWork/<JIRA_KEY>/f8.quality-implementer.out.*.md`
-- `/agentWork/<JIRA_KEY>/f9.documentarian.out.*.md`
-- `/agentWork/<JIRA_KEY>/f10.shipper.out.*.md`
+- `/agentWork/<WORK_ID>/01-launchpad.out.*.md`
+- `/agentWork/<WORK_ID>/02-story-forger.out.*.md`
+- `/agentWork/<WORK_ID>/03-impact-mapper.out.*.md`
+- `/agentWork/<WORK_ID>/04-delivery-architect.out.*.md`
+- `/agentWork/<WORK_ID>/05-change-builder.out.*.md`
+- `/agentWork/<WORK_ID>/06-verification-runner.out.*.md`
+- `/agentWork/<WORK_ID>/07-risk-reviewer.out.*.md`
+- `/agentWork/<WORK_ID>/08-quality-hardener.out.*.md`
+- `/agentWork/<WORK_ID>/09-release-scribe.out.*.md`
+- `/agentWork/<WORK_ID>/10-release-conductor.out.*.md`
 
 Always read the latest run number.
 
@@ -235,23 +267,24 @@ Always read the latest run number.
 ## 7. Naming Conventions
 
 ### File Names
-Format: `<flowTypeAbbr><nodeId>.<function>.agent.md`
+Format: `eh-<role>.agent.md`
 
 | Abbr | Flow Type | Example |
 |------|-----------|---------|
-| `a` | Architecture | `a1.c4-diagram-generator.agent.md` |
-| `f` | Feature | `f1.workspace-prep.agent.md` |
-| `r` | Refactor | `r1.quality-analyzer.agent.md` |
-| `t` | Test Coverage | `t1.coverage-analyzer.agent.md` |
-| `m` | Meta | `m1.agent-update-planner.agent.md` |
+| `eh-arch` | Architecture | `eh-20-system-cartographer.agent.md` |
+| `eh-flow` | Feature delivery | `eh-01-launchpad.agent.md` through `eh-10-release-conductor.agent.md` |
+| `eh-refactor` | Refactor | `eh-30-refactor-scout.agent.md`, `eh-31-refactor-designer.agent.md` |
+| `eh-test` | Test Coverage | `eh-40-coverage-sentinel.agent.md` |
+| `eh-meta` | Meta | `eh-90-agent-governor.agent.md`, `eh-91-instruction-editor.agent.md`, `eh-92-k8s-capacity-advisor.agent.md` |
 
 ### Output Files
 Format: `<agentName>.out.<run>.md`
-- Example: `f1.workspace-prep.out.1.md`
+- Example: `01-launchpad.out.1.md`
 
 ### Branch Names
-Format: `feature/<JIRA-KEY>-<kebab-case-description>`
-- Example: `feature/EHB-1234-add-analytics-api`
+Format: `feature/<WORK_ID>-<kebab-case-description>`
+- Example with Jira: `feature/EHB-1234-add-analytics-api`
+- Example without Jira: `feature/REQ-20260501-add-analytics-api`
 
 ---
 
@@ -260,7 +293,8 @@ Format: `feature/<JIRA-KEY>-<kebab-case-description>`
 **Applies to**: Agents with handoffs
 
 - Use frontmatter handoff definitions to route next
-- Replace `<JIRA_KEY>` placeholders with actual key
+- Replace `<WORK_ID>` placeholders with the actual work id
+- Replace `<JIRA_KEY>` placeholders with the actual Jira key only when one exists; otherwise use `<WORK_ID>`
 - Include relevant context in handoff prompt
 - Route based on pass/fail outcomes
 
@@ -287,7 +321,7 @@ The `.github/agents/` directory should be in `.gitignore` in target repositories
 | Rule | Key Action |
 |------|------------|
 | 0 | Print start identification banner |
-| 1 | Verify workspace prep output |
+| 1 | Verify 01-launchpad output |
 | 2 | Read `/docs/agent-commands.yml` first |
 | 3 | Validate terminal readiness |
 | 4 | Persist output with run metadata |

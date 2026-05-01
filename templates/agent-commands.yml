@@ -1,5 +1,6 @@
 # Agent Commands Reference
-# Agents must read this file before running terminal commands.
+# ElectraHub agents must read this file before running terminal commands.
+# Replace placeholders with the exact commands from each ElectraHub repository.
 
 paths:
   root: "."
@@ -14,19 +15,31 @@ venv:
 install:
   all: "make setup"
   backend: "mvn clean install -DskipTests"
+  backend_service: "mvn -pl <service-module> clean install -DskipTests"
   frontend: "npm install"
+  admin_portal: "npm install"
+  driver_portal: "npm install"
 
 build:
   all: "make build"
   backend: "mvn clean package -DskipTests"
+  backend_service: "mvn -pl <service-module> clean package -DskipTests"
   frontend: "npm run build"
+  admin_portal: "npm run build"
+  driver_portal: "npm run build"
 
 test:
   all: "make test"
   backend: "mvn clean test"
+  backend_service: "mvn -pl <service-module> test"
   frontend: "npm run test"
   integration: "mvn verify -Pintegration"
   e2e: "npm run test:e2e"
+  ocpp: "mvn test -Dtest=*Ocpp*Test"
+  ocpi: "mvn test -Dtest=*Ocpi*Test"
+  session: "mvn test -Dtest=*Session*Test"
+  pricing: "mvn test -Dtest=*Pricing*Test,*Tariff*Test"
+  billing: "mvn test -Dtest=*Billing*Test,*Cdr*Test"
 
 lint:
   all: "make lint"

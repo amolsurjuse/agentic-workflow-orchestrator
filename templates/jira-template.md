@@ -1,7 +1,7 @@
-# Jira Story Template (AI Delivery)
+# ElectraHub Jira Story Template (AI Delivery)
 
 ## Title
-`[Service/Module] <clear business change>`
+`[ElectraHub <service/client/protocol>] <clear charging-domain business change>`
 
 ## Story ID
 - Jira Key:
@@ -9,7 +9,7 @@
 ## Business Context
 - Problem statement:
 - Why this change is needed now:
-- Target users and impact:
+- Target ElectraHub users and impact (driver/admin/operator/partner/support/charger device):
 
 ## Scope
 ### In Scope
@@ -30,25 +30,31 @@
 - Other protocol/channel impact (REST/GraphQL/WebSocket/SSE/gRPC):
 
 ### Clients
-- Angular impact:
-- React impact:
-- iOS impact:
+- Admin/operator portal impact:
+- Driver portal impact:
+- iOS driver app impact:
+- Partner/OCPI API impact:
+- Charger/OCPP integration impact:
 
 ## Technical Notes
-- Impacted services/modules:
+- Impacted ElectraHub services/modules:
 - Impacted APIs/contracts:
 - Data model/config changes:
 - Backward compatibility considerations:
+- Kubernetes/config/secrets impact:
 
 ## Assumptions
 - 
 
 ## Dependencies
-- Internal dependencies:
-- External dependencies:
+- Internal dependencies (for example pricing, billing, session, charger, ocpi, user/auth):
+- External dependencies (payment provider, OCPI peer/hub, charger firmware/network):
 
 ## Risks
-- 
+- Protocol compatibility:
+- Connector/session state consistency:
+- Tariff/payment/CDR correctness:
+- Tenant/RBAC data exposure:
 
 ## Acceptance Criteria (Given / When / Then) — MANDATORY
 
@@ -56,10 +62,10 @@
 > Minimum: 3 (Small), 5 (Medium), 8 (Large/XL). Every functional requirement must have at least one AC.
 
 ### Happy Path
-AC-1: <Short descriptive title>
-  Given <precondition / initial state>
-  When  <action / trigger>
-  Then  <expected outcome / observable result>
+AC-1: <Short ElectraHub scenario title>
+  Given <ElectraHub precondition / initial state, such as connector status, tariff, user role, or OCPI peer state>
+  When  <driver/admin/operator/partner/charger action or system trigger>
+  Then  <observable ElectraHub outcome, API response, UI state, OCPP/OCPI payload, or persisted record>
   Verification: <unit test / integration test / manual QA>
   Priority: MUST
 
@@ -71,7 +77,7 @@ AC-2: <Short descriptive title>
   Priority: MUST
 
 ### Input Validation / Edge Cases
-AC-3: <Short descriptive title — e.g., missing input, empty state, boundary>
+AC-3: <Short descriptive title, for example missing connector, stale charger status, invalid tariff, empty station list>
   Given ...
   When  ...
   Then  ...
@@ -79,7 +85,7 @@ AC-3: <Short descriptive title — e.g., missing input, empty state, boundary>
   Priority: MUST
 
 ### Error / Negative Scenarios
-AC-4: <Short descriptive title — e.g., service failure, timeout, unauthorized>
+AC-4: <Short descriptive title, for example pricing-service 404, OCPP timeout, OCPI peer rejection, unauthorized tenant access>
   Given ...
   When  ...
   Then  ...
@@ -99,9 +105,9 @@ AC-5: ...
 
 ## Validation Plan (linked to Acceptance Criteria)
 - Unit tests to add/update:
-- Integration tests to run:
+- Integration tests to run (service-to-service, DB, OCPI/OCPP where applicable):
 - Protocol compliance checks (OCPP/OCPI where relevant):
-- Cross-client checks (Angular/React/iOS where relevant):
+- Cross-client checks (admin portal/driver portal/iOS where relevant):
 - Build commands:
   - `mvn clean test`
   - `mvn verify`
@@ -109,6 +115,7 @@ AC-5: ...
 ## Observability / Logging Notes
 - New logs expected:
 - Metrics/tracing impact:
+- Sensitive fields to avoid logging (tokens, payment data, OCPI credentials, user PII, secrets):
 
 ## Rollout / Rollback
 - Rollout approach:
@@ -123,5 +130,8 @@ AC-5: ...
 - [ ] Quality/security checks completed
 - [ ] Build/verify passed
 - [ ] OCPP/OCPI behavior validated (if in scope)
-- [ ] Angular/React/iOS impact validated (if in scope)
+- [ ] Tariff/payment/CDR correctness validated (if in scope)
+- [ ] Admin/driver/iOS impact validated (if in scope)
+- [ ] Tenant/RBAC boundaries validated (if in scope)
+- [ ] Kubernetes/config/secrets impact reviewed (if in scope)
 - [ ] PR raised with evidence

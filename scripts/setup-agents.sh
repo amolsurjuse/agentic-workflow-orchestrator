@@ -1,7 +1,7 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
 # setup-agents.sh
-# Installs the Agentic Workflow Orchestrator into a target project.
+# Installs the ElectraHub Agentic Workflow Orchestrator into a target project.
 #
 # What it does:
 #   1. Copies all .agent.md + agent-rules.md into <target>/.github/agents/
@@ -14,7 +14,7 @@
 #   8. Adds .github/agents/ and agentWork/ to <target>/.gitignore (idempotent)
 #
 # Usage:
-#   cd /path/to/your-project
+#   cd /path/to/target-repo
 #   bash /path/to/agentic-workflow-orchestrator/scripts/setup-agents.sh
 #
 #   Or with explicit target:
@@ -29,8 +29,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_DIR="${1:-$(pwd)}"
 
+if [ "$TARGET_DIR" = "$SCRIPT_DIR" ]; then
+    echo "ERROR: Refusing to install into the orchestrator scripts directory."
+    echo "       Run from the target ElectraHub repo root, or pass the target path explicitly:"
+    echo "       bash $0 /path/to/target-repo"
+    exit 1
+fi
+
 echo "========================================="
-echo "  Agentic Workflow Orchestrator Setup"
+echo "  ElectraHub Agentic Workflow Orchestrator Setup"
 echo "========================================="
 echo ""
 echo "  Source:  $REPO_DIR"
@@ -65,6 +72,22 @@ for f in "$AGENTS_DEST"/[0-9][0-9]-*.agent.md; do
     LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
 done
 
+# Remove old phase-abbreviation agent files from earlier ElectraHub installer versions.
+for f in "$AGENTS_DEST"/[afjmrt]*.agent.md; do
+    [ -f "$f" ] || continue
+    rm -f "$f"
+    echo "      Removed old abbreviation file: $(basename "$f")"
+    LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
+done
+
+# Remove prior ElectraHub generated agent files before copying the current set.
+for f in "$AGENTS_DEST"/eh-*.agent.md; do
+    [ -f "$f" ] || continue
+    rm -f "$f"
+    echo "      Removed previous ElectraHub agent file: $(basename "$f")"
+    LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
+done
+
 # Remove legacy top-level directories (for example 01-requirements-agent/).
 for d in "$AGENTS_DEST"/[0-9][0-9]-*; do
     [ -d "$d" ] || continue
@@ -78,6 +101,22 @@ for d in "$AGENTS_DEST"/skills/agents/[0-9][0-9]-*; do
     [ -d "$d" ] || continue
     rm -rf "$d"
     echo "      Removed legacy skill folder: skills/agents/$(basename "$d")/"
+    LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
+done
+
+# Remove old phase-abbreviation skill folders from earlier installer versions.
+for d in "$AGENTS_DEST"/skills/agents/[afjmrt]*; do
+    [ -d "$d" ] || continue
+    rm -rf "$d"
+    echo "      Removed old abbreviation skill folder: skills/agents/$(basename "$d")/"
+    LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
+done
+
+# Remove prior ElectraHub generated skill folders before copying the current set.
+for d in "$AGENTS_DEST"/skills/agents/eh-*; do
+    [ -d "$d" ] || continue
+    rm -rf "$d"
+    echo "      Removed previous ElectraHub skill folder: skills/agents/$(basename "$d")/"
     LEGACY_CLEANED=$((LEGACY_CLEANED + 1))
 done
 
@@ -256,7 +295,7 @@ echo "  Installed to: $TARGET_DIR"
 echo ""
 echo "  Files copied:"
 echo "    legacy cleanup                 $LEGACY_CLEANED removed"
-echo "    .github/agents/*.agent.md      $COUNT agents + rules"
+echo "    .github/agents/eh-*.agent.md   $COUNT agents + rules"
 echo "    .github/agents/skills/         $SKILL_COUNT skill files"
 echo "    .github/agents/references/     $REF_COUNT reference files"
 echo "    .ai/                           $TPL_COUNT templates (without agent-commands.yml)"
@@ -273,8 +312,9 @@ for f in "$REPO_DIR/.github/agents"/*.agent.md; do
 done | sort
 echo ""
 echo "  Next steps:"
-echo "    1. Edit docs/agent-commands.yml for your project's commands"
+echo "    1. Edit docs/agent-commands.yml for this ElectraHub service/client"
 echo "    2. Restart your VS Code / Claude Code session"
-echo "    3. Start: @f1.workspace-prep <JIRA_KEY> <short description>"
+echo "    3. Start: @01-launchpad <JIRA_KEY> <short ElectraHub description>"
+echo "       Or: @01-launchpad <short ElectraHub description>"
 echo ""
 echo "Done."
