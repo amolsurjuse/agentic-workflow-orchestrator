@@ -8,6 +8,7 @@ The workflow is tailored for ElectraHub domains such as EV charging backend serv
 
 - Sequenced ElectraHub delivery agents under `.github/agents/`.
 - Matching Codex skill instructions under `skills/agents/`.
+- Shared repo-wide references under `skills/references/`, including the ElectraHub logging standard.
 - Shared rules that every agent must read before acting.
 - A setup script that installs the agent package into a target ElectraHub repository.
 - Project templates for command mappings, Jira story structure, pull request notes, and project context.
@@ -236,6 +237,7 @@ docs/agent-commands.yml
 ## Maintenance Notes
 
 - Keep `.github/agents/` and `skills/agents/` aligned when adding, removing, or renaming agents.
+- Keep shared references in `skills/references/` aligned with service standards such as logging and observability.
 - Keep runtime agent names sequenced and concise.
 - Keep file names using the `eh-` abbreviation.
 - Keep `agent-rules.md` as the shared source of workflow behavior.

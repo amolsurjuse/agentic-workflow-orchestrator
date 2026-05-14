@@ -23,3 +23,7 @@ Keep ElectraHub context active: OCPP, OCPI, connector/session state, tariff/pric
 9. `08-quality-hardener` — apply quality improvements
 10. `09-release-scribe` — PR notes, release evidence, and rollout docs
 11. `10-release-conductor` — ship/merge workflow
+
+## Shared Standards
+
+- `logging-standard.md` — canonical trace-aware logging, MDC propagation, and sensitive-data rules for all ElectraHub services.
