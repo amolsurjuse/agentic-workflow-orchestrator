@@ -25,14 +25,14 @@ This orchestrator is tuned for **ElectraHub**, an EV charging platform. Treat ev
 ### Expected technical landscape
 - Backend work is typically Java/Spring Boot microservices with Maven, database migrations, DTO/entity/service layers, REST clients, config keys, and operational logging.
 - Frontend work may touch Angular/React admin or driver portal flows.
-- Mobile work may touch iOS driver app flows.
+- Mobile work may touch the iOS driver app (`driver-portal-ios`, SwiftUI + MapKit + URLSession SSE) **and the Android driver app** (`DriverPortalAndroid`, Jetpack Compose + Material 3 + OkHttp SSE, kotlinx.serialization). Treat the two as a single product surface — feature parity is the default unless a story explicitly scopes to one platform.
 - Infrastructure work may touch Kubernetes manifests/config, secrets, service discovery, observability, and rollout safety.
 
 ### ElectraHub delivery rules
 - Always state whether OCPP, OCPI, pricing/tariff, payment, session, connector status, RBAC, or tenant/operator boundaries are impacted.
 - When a story touches charging behavior, include at least one concrete scenario using ElectraHub domain language, for example connector status transitions, remote start/stop, tariff lookup failure, CDR generation, or OCPI peer payload compatibility.
 - For backend config changes, call out Kubernetes/config governance and secret handling.
-- For user-facing changes, identify the affected ElectraHub client surface: admin portal, driver portal, iOS app, partner/OCPI API, or charger/OCPP integration.
+- For user-facing changes, identify the affected ElectraHub client surface: admin portal, driver portal, **iOS app, Android app**, partner/OCPI API, or charger/OCPP integration. When a mobile change ships, state whether the work is iOS-only, Android-only, or both — and explicitly list the feature-parity follow-up for the other platform if it is not in the same delivery.
 - Do not leave generic placeholders such as "service/module" or "business outcome" unresolved when ElectraHub-specific names can be inferred from the Jira story or repository context.
 
 ## 0. Agent Identification (MANDATORY)

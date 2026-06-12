@@ -85,6 +85,7 @@ Each runtime agent name includes the workflow sequence id. Agent files use the `
 | 30 | `30-refactor-scout` | Finds refactor opportunities and quality improvement areas. |
 | 31 | `31-refactor-designer` | Designs refactor plans before implementation. |
 | 40 | `40-coverage-sentinel` | Reviews test coverage and recommends focused coverage work. |
+| 50 | `50-android-mobile` | Domain subagent for `DriverPortalAndroid` (Compose / OkHttp / Material 3). Used when a story affects the Android driver app or when porting iOS features to Android for parity. |
 | 90 | `90-agent-governor` | Maintains agent governance and workflow consistency. |
 | 91 | `91-instruction-editor` | Updates agent instructions safely. |
 | 92 | `92-k8s-capacity-advisor` | Reviews Kubernetes resource and capacity concerns. |
