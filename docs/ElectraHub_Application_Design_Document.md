@@ -1209,3 +1209,302 @@ Important gaps/future hardening:
 - Add TeamCity build definitions and artifact promotion rules.
 - Add backup/restore runbook and RPO/RTO.
 - Add production incident runbook for Cloudflare 1033, Argo degraded apps, OCPP disconnected chargers, and stuck sessions.
+
+## 18. Required Hardening and Design Clarifications
+
+This section captures design requirements that are not optional long-term polish. They should be treated as architecture decisions or required implementation backlog before ElectraHub is considered durable production infrastructure.
+
+### 18.1 Charging Session State Machine
+
+`session-service` must own the authoritative driver charging session state machine. The platform currently references `PREPARING`, `ACTIVE`, and terminal states, but the full state contract must be explicit.
+
+Recommended state model:
+
+| State | Meaning | Valid next states |
+|---|---|---|
+| `REQUESTED` | Driver requested start; request accepted by API but remote command not sent yet | `PREPARING`, `START_REJECTED`, `FAILED`, `CANCELLED` |
+| `PREPARING` | RemoteStart was accepted by OCPP service/charger; waiting for OCPP `StartTransaction` or equivalent state update | `ACTIVE`, `START_TIMEOUT`, `FAILED`, `CANCELLED` |
+| `ACTIVE` | Charger has started transaction and meter values should flow | `STOP_REQUESTED`, `STOPPING`, `COMPLETED`, `FAILED` |
+| `STOP_REQUESTED` | Driver/system requested stop; remote stop command is being sent | `STOPPING`, `COMPLETED`, `STOP_TIMEOUT`, `FAILED` |
+| `STOPPING` | Charger acknowledged stop; waiting for final meter/transaction close | `COMPLETED`, `STOP_TIMEOUT`, `FAILED` |
+| `COMPLETED` | Final meter values, cost, settlement, and receipt are complete | none |
+| `CANCELLED` | Session was cancelled before energy delivery | none |
+| `START_REJECTED` | Charger rejected remote start | none |
+| `START_TIMEOUT` | Remote start accepted but no charger transaction arrived before timeout | none |
+| `STOP_TIMEOUT` | Stop requested but charger never confirmed completion before timeout | `COMPLETED`, `FAILED` |
+| `FAILED` | Irrecoverable system or charger failure | none |
+
+Required reconciliation behavior:
+
+- A scheduled reconciliation job should scan sessions in `REQUESTED`, `PREPARING`, `STOP_REQUESTED`, and `STOPPING`.
+- `PREPARING` sessions should time out if no matching OCPP transaction/meter event arrives within the configured start window.
+- `ACTIVE` sessions should be marked suspicious/stale if no meter value or heartbeat is received within the configured stale window.
+- `STOP_REQUESTED` and `STOPPING` sessions should either finalize from the last known meter value or move to `STOP_TIMEOUT` for manual review.
+- Reconciliation actions must emit SSE updates, audit records, and notification events where applicable.
+
+### 18.2 Idempotency and Duplicate Event Protection
+
+Idempotency is required anywhere a retry can create money movement, a session, or an irreversible side effect.
+
+| Operation | Idempotency key | Required behavior |
+|---|---|---|
+| `POST /session/api/v1/sessions/start` | Client `idempotencyKey` + account + charger + connector | Return the existing start result for duplicate keys; never create a second active session |
+| `POST /session/api/v1/sessions/{id}/stop` | Session id + account + request id | Duplicate stop requests must be safe and return current/terminal state |
+| OCPP `StartTransaction` | charge point id + connector id + OCPP transaction id | Duplicate delivery must attach to existing session/transaction |
+| OCPP `MeterValues` | transaction id + sampled timestamp + measurand | Duplicate meter samples must not double-count energy or cost |
+| Wallet top-up/reload | payment provider idempotency key | Duplicate retries must not double-credit/debit wallet |
+| Settlement | session id | Exactly one final settlement per session |
+| Receipt/CDR generation | session id | Exactly one canonical receipt/CDR; regeneration must create a new version or audit entry |
+
+Implementation preference:
+
+- Store idempotency keys in the owning service database with request hash, response body/status, expiry, and processing state.
+- Return `409 Conflict` if the same idempotency key is reused with a different request body.
+- Use database uniqueness constraints for active session uniqueness, payment settlement uniqueness, and OCPP transaction uniqueness.
+
+### 18.3 Payment Authorization, Settlement, and Money Authority
+
+The platform must define one authoritative money flow:
+
+1. `pricing-service` owns tariff interpretation and cost calculation rules.
+2. `session-service` owns charging session lifecycle and meter-value aggregation.
+3. `payment-service` owns wallet balance, authorization/hold, debit, refund, and settlement ledger.
+4. `billing-service` owns CDRs, invoices, receipts, tax documents, and reporting.
+
+Start charging should not only "check" wallet eligibility. It should create a payment authorization or hold through `payment-service`.
+
+Required payment states:
+
+| State | Meaning |
+|---|---|
+| `AUTH_PENDING` | Session start requested; authorization in progress |
+| `AUTHORIZED` | Hold/reservation is created and session can start |
+| `AUTH_FAILED` | Insufficient funds or payment provider failure |
+| `CAPTURE_PENDING` | Session stopped; final amount being captured/debited |
+| `CAPTURED` | Final debit complete |
+| `PARTIALLY_CAPTURED` | Debit less than expected; manual review required |
+| `REFUNDED` | Hold or overcharge was released/refunded |
+| `SETTLEMENT_FAILED` | Capture/debit failed after charging; recovery required |
+
+Money precision and reconciliation rules:
+
+- Store money as fixed precision decimal or integer minor units, never binary floating point.
+- Define rounding mode per currency. For USD, round final customer-facing totals to cents after component-level calculation.
+- Final charge authority should be: final meter values from `session-service` + tariff calculation from `pricing-service` + final ledger mutation in `payment-service`.
+- `billing-service` should record the final charge and CDR from the settled result, not independently recompute a conflicting amount.
+- A reconciliation job should compare session final cost, payment ledger settlement, invoice/CDR totals, and receipt events.
+
+### 18.4 Kafka, Outbox, and Billing Consistency
+
+Kafka is currently optional for analytics, but billing facts cannot silently depend on an optional event bus.
+
+Required guarantees:
+
+- Core financial settlement must complete without Kafka.
+- If Kafka is enabled, receipt/CDR analytics events should be emitted through a transactional outbox, not best-effort in-request publishing.
+- Outbox tables such as `payment_outbox_event` require a relay process with documented retry, backoff, poison-message handling, and metrics.
+- `billing-service` should have a replay/reindex job that rebuilds facts from source-of-truth tables for a time range.
+- Kafka consumer offsets and replay strategy must be documented before Kafka-fed tables are used for reporting commitments.
+
+### 18.5 SSE Authentication and Streaming Security
+
+The SSE endpoint is directly routed from nginx ingress to `session-service` for streaming behavior. Because this bypasses gateway authentication, `session-service` must authenticate and authorize the stream independently.
+
+Required SSE auth rules:
+
+- The stream endpoint must validate JWT signature, expiry, account id, roles, and terms version inside `session-service`.
+- Browser `EventSource` cannot set arbitrary `Authorization` headers. If browser clients use SSE, prefer a short-lived, single-purpose stream token issued by an authenticated REST endpoint.
+- Avoid long-lived JWTs in query strings because URLs can leak through logs and browser history.
+- If cookies are used, enforce `HttpOnly`, `Secure`, `SameSite`, CSRF strategy, and origin checks.
+- The stream must scope events by authenticated account id. A client must never be able to choose another account id through request parameters.
+- Stream auth failures should return `401`; RBAC failures should return `403`; terms-gated failures should return `451`.
+
+Operational SSE rules:
+
+- Disable proxy buffering for SSE.
+- Keep read timeout above expected stream lifetime.
+- Emit heartbeat events to prevent idle connection drops.
+- On pod termination, send a final reconnect event if possible and stop accepting new streams before shutdown.
+
+### 18.6 JWT, Redis, and Auth Failure Modes
+
+Current JWT validation uses a shared secret. The stronger long-term model is asymmetric signing:
+
+- `auth-service` holds the private signing key.
+- `api-gateway` and backend services hold only public verification keys.
+- Key ids (`kid`) should support rotation.
+- Services must never be able to mint tokens unless explicitly designed as token issuers.
+
+Redis failure mode must be explicit because denylist and token-version checks are on the request path.
+
+Recommended policy:
+
+- Fail closed for admin, payment, billing, user mutation, and session mutation APIs.
+- For low-risk read APIs, consider a short local cache fallback only if stale-token risk is accepted and documented.
+- Emit clear metrics: Redis unavailable, token-version lookup failed, denylist lookup failed, auth fail-open/fail-closed count.
+
+Auth hardening requirements:
+
+- Add app-level login brute-force protection by account, IP, and device fingerprint.
+- Add lockout or step-up verification after repeated failures.
+- Record auth audit events for login success/failure, password reset, token refresh, logout, and terms acceptance.
+
+### 18.7 Identity Mapping and Multi-Tenancy
+
+Identity currently appears in multiple domains: auth users, user profiles, driver/session records, and account ids in JWTs. This must be formalized.
+
+Recommended identity contract:
+
+| Identifier | Owner | Purpose |
+|---|---|---|
+| `userId` / `uid` | `user-service` | Stable human/user profile id |
+| `accountId` | `user-service` / auth token | Security principal used in JWT and API authorization |
+| `driverId` | `session-service` or driver domain | Charging-session participant, maps to account/user |
+| `tenantId` | platform tenancy model | Enterprise/network isolation boundary |
+
+Rules:
+
+- JWT should carry the canonical account/user id used by gateway and services.
+- Services may keep local foreign-key copies, but must not independently create conflicting identities.
+- The mapping between `accountId`, `userId`, and `driverId` must be immutable or fully audited.
+- If multi-tenancy is real, every tenant-owned table should carry tenant scope or derive it through a required foreign key.
+- RBAC checks must include tenant/enterprise/network scoping, not only global roles.
+
+### 18.8 Charger Topology Source of Truth
+
+The platform has overlapping topology models in `station-management-service` and `charger-management-service`. This must be resolved or clearly partitioned.
+
+Recommended ownership split:
+
+- `station-management-service` owns physical/site topology: network, enterprise, location, EVSE, connector, availability.
+- `charger-management-service` owns operational/admin charger inventory views, GraphQL discovery projections, and Elasticsearch/search documents.
+- `charger-management-service` should consume or synchronize from the station source of truth, not independently own conflicting connector reality.
+- OCPP status updates should write to the topology source of truth first, then publish/update projections.
+
+Required safeguards:
+
+- Use immutable protocol identifiers:
+  - OCPP charge point id: charger identity, for example `EH-SFO-CHG-001`.
+  - OCPI location id: location identity, for example `US*EHB*LOC*SFO001`.
+  - Connector id: physical connector identity, for example `CON-SFO-001`.
+  - Tariff id: pricing identity; never valid as connector id.
+- Add reconciliation jobs that compare station topology, charger inventory projections, OCPP connection state, and Elasticsearch documents.
+
+### 18.9 OCPP Command Routing, Scaling, and Auth
+
+OCPP WebSocket connections are stateful. Horizontal scaling requires more than storing a charger row in a database.
+
+Required command-routing design:
+
+- Each live OCPP connection must register `chargePointId -> podId/instanceId/connectionId`.
+- Remote commands must be routed to the pod that holds the charger socket.
+- Recommended options:
+  - Sticky routing plus pod-local command execution for small scale.
+  - Redis pub/sub or RabbitMQ command bus where each pod subscribes and only the owning pod executes.
+  - Dedicated OCPP connection manager if the platform grows beyond simple pod-local routing.
+- On pod shutdown, mark owned connections as draining/disconnected and allow chargers to reconnect.
+- On pod crash, stale connection ownership must expire automatically through heartbeat/TTL.
+
+OCPP endpoint authentication is critical:
+
+- Public `/ws/ocpp/{chargePointId}` must not allow arbitrary clients to impersonate chargers.
+- Use OCPP-supported Basic auth and/or mutual TLS/client certificates.
+- Validate charge point id against registered charger inventory.
+- Reject mismatched credentials/id pairs.
+- Rate limit failed connection attempts and log suspicious duplicate charger identities.
+
+### 18.10 Platform Durability, Backups, and Production Risk
+
+The current production environment is k3d on a Windows/WSL2 workstation. This is useful for controlled low-traffic operation, but it is not durable production infrastructure.
+
+Known risks:
+
+- Workstation reboot, Windows update, Docker Desktop restart, or WSL failure can take prod offline.
+- Single-node k3d has limited availability guarantees.
+- A single PostgreSQL instance is a shared failure point.
+- Shared databases such as `appdb` for multiple services weaken service ownership and create noisy-neighbor risk.
+- Persistent volume backup/restore must be proven, not assumed.
+
+Required production path:
+
+- Define RPO/RTO for PostgreSQL, Redis, RabbitMQ, object/file storage, and Docker images.
+- Automate PostgreSQL backups with restore tests.
+- Document Redis persistence assumptions. Token/session caches may be rebuildable; streams/queues may not be.
+- Move durable prod workloads to a managed or multi-node Kubernetes environment when usage becomes business-critical.
+- Split money and notification databases so payment data does not share a database with unrelated services.
+- Add resource requests/limits, probes, PodDisruptionBudgets, and controlled rollout strategies for all services.
+
+### 18.11 Graceful Draining for SSE and OCPP
+
+SSE and OCPP use long-lived connections. Deployments must handle them intentionally.
+
+Required Kubernetes behavior:
+
+- Readiness probe should fail before shutdown so new traffic stops.
+- `preStop` hook should give the pod time to notify or drain clients.
+- Termination grace period should account for WebSocket/SSE cleanup.
+- OCPP pods should mark chargers as reconnecting/draining before closing sockets.
+- SSE should send a reconnect hint or rely on client backoff.
+- Rolling updates for OCPP should avoid restarting all socket-owning pods at once.
+
+### 18.12 Notification Reliability Classes
+
+Notification delivery should be split by business criticality.
+
+| Class | Examples | Required behavior |
+|---|---|---|
+| Transactional-critical | Password reset, account security alert, payment failure | Retry with backoff, DLQ, support visibility, no low daily cap |
+| Transactional-normal | Charging receipt, charging started/stopped, battery full | Retry with backoff, DLQ or replay, user preference respected where legally allowed |
+| Operational/support | Contact support email, internal alert | Retry and support queue visibility |
+| Promotional/low-risk | Marketing, announcements | Strict rate limits, opt-in, safe to drop after policy |
+
+Dev can keep intentionally small quota limits and no-retry behavior. Prod should not silently drop critical reset or receipt messages.
+
+### 18.13 API Versioning, Error Model, and Pagination
+
+Mobile clients cannot be force-updated instantly, so API compatibility must be managed.
+
+Required API policy:
+
+- Keep `/api/v1` stable until all supported clients migrate.
+- Introduce breaking changes under `/api/v2`.
+- Publish deprecation windows for mobile-visible APIs.
+- Standardize error envelope:
+
+```json
+{
+  "timestamp": "2026-06-18T00:00:00Z",
+  "status": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "Request validation failed",
+  "details": [],
+  "traceId": "..."
+}
+```
+
+- Standardize pagination fields: `limit/offset` or `page/size`, not a different style per service unless documented.
+- Validation errors should use `400`, RBAC failures `403`, unauthenticated failures `401`, terms-required failures `451`.
+
+### 18.14 PII, Retention, and Erasure
+
+User deletion and privacy controls must account for financial retention requirements.
+
+Policy requirements:
+
+- Define which PII can be erased immediately, anonymized, or retained for tax/legal reasons.
+- Invoices, receipts, CDRs, and payment ledger records may require retention even after account deletion.
+- Retained financial records should minimize PII and reference anonymized user ids where possible.
+- Add data export and deletion/audit endpoints only after retention rules are clear.
+
+### 18.15 Testing Strategy
+
+Required test layers:
+
+- Unit tests for state transitions, pricing calculation, auth/RBAC decisions, and idempotency.
+- Contract tests between gateway and services for route/auth/error behavior.
+- Contract tests between session, payment, pricing, OCPP, and billing for charging lifecycle.
+- OCPP simulator tests for boot, heartbeat, status, remote start/stop, meter values, reconnect, duplicate delivery, and stale sessions.
+- OCPI conformance tests for credentials, locations, tariffs, sessions, CDRs, and commands.
+- SSE tests for auth, reconnect, heartbeat, ordering, and account isolation.
+- Load tests for OCPP WebSocket fan-in, SSE stream count, and API gateway rate limits.
+- Disaster recovery tests for PostgreSQL restore and Redis/RabbitMQ restart behavior.
