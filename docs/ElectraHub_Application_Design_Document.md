@@ -1,6 +1,6 @@
 # ElectraHub Application Design Document
 
-Date: 2026-06-18
+Date: 2026-06-24
 
 This document describes the current ElectraHub platform as implemented in the local repositories under `C:\development\project` and deployed through `k8s-platform` to the k3d dev and prod clusters. It covers component responsibilities, external routing, SSL/TLS termination, service communication, SSE, OCPP/OCPI event flow, API surfaces, persistence, and asynchronous messaging.
 
@@ -1209,6 +1209,8 @@ Important gaps/future hardening:
 - Add TeamCity build definitions and artifact promotion rules.
 - Add backup/restore runbook and RPO/RTO.
 - Add production incident runbook for Cloudflare 1033, Argo degraded apps, OCPP disconnected chargers, and stuck sessions.
+- Add live dashboard data lineage export that proves admin analytics is served from the billing/search projection, not ad hoc raw session queries.
+- Add trace sampling/export configuration once OpenTelemetry Collector, Splunk, or another log/trace backend is selected.
 
 ## 18. Required Hardening and Design Clarifications
 
@@ -1508,3 +1510,187 @@ Required test layers:
 - SSE tests for auth, reconnect, heartbeat, ordering, and account isolation.
 - Load tests for OCPP WebSocket fan-in, SSE stream count, and API gateway rate limits.
 - Disaster recovery tests for PostgreSQL restore and Redis/RabbitMQ restart behavior.
+
+### 18.16 Distributed Tracing, Log Correlation, and Monitoring Contract
+
+Trace and span identifiers are mandatory for every request-facing service log line that can participate in a user, admin, OCPP, notification, or billing flow. Blank `traceId` or `spanId` values are treated as an observability defect because they prevent distributed tracing and Splunk-style log correlation.
+
+Required inbound behavior:
+
+- `api-gateway` is the public correlation boundary for backend HTTP traffic.
+- Every backend service must populate MDC keys `traceId` and `spanId` for each inbound HTTP request.
+- Services must first preserve a valid W3C `traceparent` header when present.
+- If no `traceparent` exists, services should preserve `X-Trace-Id` / `X-Span-Id` or B3 headers when present.
+- If no upstream trace context exists, services must generate a 32-hex trace id and 16-hex span id.
+- Services should return `X-Trace-Id` and `X-Span-Id` response headers to make client-side troubleshooting possible.
+- Services should emit a W3C `traceparent` response header only when both ids are valid W3C-compatible hex values.
+
+Required outbound behavior:
+
+- Service-to-service HTTP clients must propagate:
+  - `traceparent`
+  - `X-Trace-Id`
+  - `X-Span-Id`
+  - `X-B3-TraceId`
+  - `X-B3-SpanId`
+- RabbitMQ and Kafka producers should include trace metadata in message headers or payload metadata when event schemas permit it.
+- Message consumers must establish MDC before logging or dispatching downstream work. If an event has no trace header, derive a deterministic trace id from the event id where possible.
+- Scheduled jobs must generate a job-scoped trace id at job start and include job name, shard/range, and attempt number in logs.
+
+Log format requirements:
+
+- Every service log pattern must include `traceId` and `spanId`.
+- Error responses should include `traceId` in the standard error envelope.
+- Logs must avoid raw JWTs, refresh tokens, password-reset tokens, card details, Firebase tokens, SMTP credentials, and full request bodies containing PII.
+- Use structured log fields for `service`, `env`, `tenantId`, `userId/accountId`, `chargerId`, `connectorId`, `sessionId`, `transactionId`, and `idempotencyKey` where applicable.
+
+Monitoring contract:
+
+- Splunk or any equivalent log backend should index `traceId`, `spanId`, `service`, `env`, `level`, `sessionId`, `chargerId`, `connectorId`, and `eventType`.
+- A single charging start/stop journey must be searchable from mobile request to gateway, session, payment, pricing, OCPP, station, billing, and notification logs by one trace id.
+- Dashboards should alert on blank trace id rate, 5xx rate by route/service, OCPP command timeout rate, stale connector count, session stuck-state count, and billing projection lag.
+- Trace propagation should be regression-tested with a synthetic request that passes through at least gateway -> session -> OCPP/payment/pricing and asserts one correlation id in all involved logs.
+
+### 18.17 Admin Dashboard Analytics Projection Contract
+
+The admin dashboard must be an operational analytics view, not a raw session table browser. Dashboard numbers should come from the billing/search analytics projection that is populated from completed charging facts and CDR/receipt events.
+
+Source-of-truth rules:
+
+- Raw charging lifecycle state lives in `session-service`.
+- Final settled charge and CDR/receipt facts are owned by `billing-service`.
+- Admin dashboard aggregate APIs are owned by `billing-service` under `/api/v1/admin/analytics`.
+- Elasticsearch/search documents are projections for fast dashboard and discovery reads; they are not the only durable source of truth.
+- If Elasticsearch is unavailable, the system must either serve from PostgreSQL analytics fact tables or clearly return a degraded response. It must not silently show stale or partial totals as authoritative.
+
+Analytics ingestion rules:
+
+- Every completed charging session must produce one canonical completed-session fact keyed by `sessionId`.
+- Kafka receipt/CDR events should update billing analytics facts and search indexes.
+- If Kafka is disabled or delayed, a replay/reindex job must rebuild analytics facts from source tables.
+- Dashboard cards, trends, driver leaderboard, utilization, and session reports should read from the same fact model so totals reconcile.
+- Admin dashboard should show data freshness: `lastUpdatedAt`, projection lag, and selected date range.
+
+Trend visualization rules:
+
+- `Last 7d` and `Last 30d` should default to daily buckets.
+- Longer custom ranges may use weekly or monthly buckets.
+- Missing buckets should render as explicit zero buckets so sparse periods do not collapse into a misleading single point.
+- Trend summaries should show total, average per bucket, peak bucket, bucket coverage, and current granularity.
+- The UI should clearly label whether values are daily, weekly, or monthly aggregates.
+
+Operational checks:
+
+- Completed prod sessions visible in driver receipt/history must appear in admin analytics after the projection SLA.
+- The driver revenue leaderboard should display driver name/email when available and fall back to id only when profile data is missing.
+- Analytics reindex should be safe to run by time range and should be idempotent.
+- Regression tests should create/complete sessions, wait for projection, and assert dashboard totals and leaderboard counts increase.
+
+### 18.18 OCPP Heartbeat, Availability, and Offline Propagation
+
+OCPP heartbeat and status handling is the authoritative real-time source for charger online/offline availability. Availability must propagate consistently from OCPP connection state to station topology, charger discovery, simulator UI, and driver session start eligibility.
+
+Protocol-aligned rules:
+
+- WebSocket connected means the charge point has an active transport connection, but it does not by itself mean every connector is available.
+- `BootNotification` identifies and registers a charge point. It should not overwrite connector availability unless the charger also sends status information.
+- `Heartbeat` updates charge point liveness and last-seen timestamp. It should not force connectors to `AVAILABLE`.
+- `StatusNotification` is the authoritative connector-level availability event in OCPP 1.6.
+- OCPP 2.0.1 equivalent transaction/status events must be normalized to the same internal connector availability model.
+- Remote start should only target a charger with a live OCPP connection and a connector that is available or otherwise start-eligible under the current protocol state.
+
+Offline detection:
+
+- `ocpp-service` must track `lastSeenAt`, `lastHeartbeatAt`, connection id, protocol version, and owning pod/instance.
+- A heartbeat monitor should mark a charge point stale/offline when no heartbeat or WebSocket activity is observed within the configured grace window.
+- On WebSocket close, owned connectors should move to an unavailable/offline projection unless another live connection for the same charge point takes ownership.
+- Offline/stale changes must be idempotent and should not repeatedly emit duplicate state events.
+
+Propagation path:
+
+1. Charger/simulator sends Boot, Heartbeat, StatusNotification, TransactionEvent, or disconnects.
+2. `ocpp-service` updates `ocpp_connections` and derives charge point liveness.
+3. `ocpp-service` calls `station-management-service` internal availability/status endpoints.
+4. `station-management-service` updates station, EVSE, and connector availability.
+5. `charger-management-service` syncs/reindexes charger discovery/search projections.
+6. Driver GraphQL discovery reflects updated `availablePorts`, `busyPorts`, and connector statuses.
+7. `session-service` validates current availability before remote start and rejects stale/offline connectors with a user-actionable error.
+8. Simulator UI receives DMS/OCPP events and renders the same charger/connector state as backend discovery.
+
+Session interaction:
+
+- A session in `PREPARING` should move to `START_TIMEOUT` if the charger never emits a matching start transaction after remote-start acceptance.
+- An `ACTIVE` session should become stale/suspicious when meter values stop but the charger is still connected.
+- If a charger goes offline during `ACTIVE`, the session should move to a stopping/reconciliation path using last known meter values and operator review if final stop data never arrives.
+- A stopped or terminal session must clear connector busy state after final OCPP stop or reconciliation.
+
+Metrics and alerts:
+
+- Connected charger count by protocol.
+- Stale heartbeat count.
+- Offline connector count.
+- Remote start attempted against stale/offline charger.
+- Active session without recent meter value.
+- Connector busy without active session.
+- Active session on offline charge point.
+
+### 18.19 OCPP, OCPI, and Regression Connector Identity Contract
+
+Connector identity has four related but distinct concepts. Mixing them caused false failures and inconsistent start behavior, so this contract is mandatory for mobile, driver portal, simulator, JMeter, and backend APIs.
+
+| Field | Meaning | Example | Rules |
+|---|---|---|---|
+| `chargerId` | OCPP charge point identity | `EH-US-CHG-0031` | Used for OCPP WebSocket and remote commands |
+| `locationId` | OCPI location identity | `US*EHB*LOC*USA007` | Used for location display and OCPI location mapping |
+| `connectorId` | Platform physical connector identity | `CON-US-0031` | Stable connector record id used by discovery/session APIs |
+| `connectorNumber` | OCPP connector number on the charger | `1` | Numeric OCPP connector id; not derived from fleet sequence |
+
+Rules:
+
+- `connectorNumber` must never be parsed from the trailing digits of `connectorId`.
+- A charger fleet sequence such as `EH-US-CHG-0081` or `CON-US-0081` does not imply OCPP connector number `81`.
+- For one-connector simulated chargers, `connectorNumber` is `1`.
+- For multi-connector chargers, `connectorNumber` is the connector number on that charge point, commonly `1`, `2`, `3`, etc.
+- Driver apps should send all four fields when available.
+- Backend validation should reject `chargerId` values that look like OCPI location ids and reject tariff ids as connector ids.
+- JMeter and load-test datasets must model physical OCPP connector numbers, not charger sequence numbers.
+- GraphQL discovery should include enough connector metadata for clients and tests to avoid guessing connector numbers.
+
+### 18.20 Regression, Load Test, and Release Gates
+
+The charging flow is safety-critical for user experience and support. Regression gates should exercise the same end-to-end path a driver uses, plus projection and admin visibility.
+
+Required charging regression steps:
+
+1. Create or reuse test users.
+2. Authenticate and accept terms.
+3. Add payment card and wallet balance.
+4. Discover chargers through GraphQL with optional geo filters.
+5. Select only available connectors with live OCPP state.
+6. Start charging with distinct `chargerId`, `locationId`, `connectorId`, and correct `connectorNumber`.
+7. Open SSE stream and assert snapshot plus session update events.
+8. Verify meter-value progression: energy, power, estimated cost, and status.
+9. Stop session and assert terminal session state.
+10. Verify connector becomes available or correct post-stop state.
+11. Verify receipt is available.
+12. Verify payment state reflects settlement.
+13. Verify billing/CDR/admin analytics projection within SLA.
+14. Verify notification event creation for configured channels.
+
+Acceptance criteria:
+
+- No 5xx responses in the happy path.
+- RBAC failures return `403`, auth failures return `401`, terms-required failures return `451`.
+- No active session remains after stop and reconciliation windows.
+- No connector remains busy without an active session.
+- No completed session is missing from billing/admin analytics after projection SLA.
+- Every request chain has nonblank `traceId` and `spanId` in logs.
+- JMeter results must publish JTL, HTML report, failed request body on error, and selected connector identity fields.
+
+Load-test constraints:
+
+- Load tests must not use production customer accounts.
+- Test users and sessions must be identifiable with run id metadata.
+- Parallel users should use distinct connectors unless a race-condition test intentionally targets one connector.
+- Race-condition tests should assert exactly one winner for simultaneous starts on the same connector and deterministic `409 Conflict` or idempotent response for losers.
+- Tests must clean up or reconcile sessions even when assertions fail.
