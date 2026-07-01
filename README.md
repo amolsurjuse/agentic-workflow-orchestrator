@@ -239,6 +239,11 @@ Shared operational references live in `skills/references/`:
 - `regression-playbook.md`
 - `logging-standard.md`
 
+Current cross-service design documents live in `docs/`, including:
+
+- `ElectraHub_Application_Design_Document.md`
+- `ElectraHub_Card_Present_Payment_Simulation_Design.md`
+
 ## Validation
 
 For this repository, basic validation is:
