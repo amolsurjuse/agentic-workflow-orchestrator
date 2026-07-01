@@ -61,7 +61,7 @@ AGENT_DOMAIN=<domain>
 **Applies to**: All agents except `01-launchpad`
 
 ### Scope
-This pre-check applies to the ElectraHub feature delivery agents only. Architecture, refactor, coverage, and meta utility agents invoked directly by the user may proceed without 01-launchpad verification.
+This pre-check applies to the ElectraHub feature delivery agents only. Architecture, refactor, coverage, regression, observability, and meta utility agents invoked directly by the user may proceed without 01-launchpad verification.
 
 Before doing ANY other work, read the latest `/agentWork/<WORK_ID>/01-launchpad.out.*.md` and verify:
 - The work id in the handoff matches the 01-launchpad output
@@ -274,8 +274,8 @@ Format: `eh-<role>.agent.md`
 | `eh-arch` | Architecture | `eh-20-system-cartographer.agent.md` |
 | `eh-flow` | Feature delivery | `eh-01-launchpad.agent.md` through `eh-10-release-conductor.agent.md` |
 | `eh-refactor` | Refactor | `eh-30-refactor-scout.agent.md`, `eh-31-refactor-designer.agent.md` |
-| `eh-test` | Test Coverage | `eh-40-coverage-sentinel.agent.md` |
-| `eh-meta` | Meta | `eh-90-agent-governor.agent.md`, `eh-91-instruction-editor.agent.md`, `eh-92-k8s-capacity-advisor.agent.md` |
+| `eh-test` | Test Coverage and Regression | `eh-40-coverage-sentinel.agent.md`, `eh-41-regression-sentinel.agent.md` |
+| `eh-meta` | Meta and Operations | `eh-90-agent-governor.agent.md`, `eh-91-instruction-editor.agent.md`, `eh-92-k8s-capacity-advisor.agent.md`, `eh-93-observability-sentinel.agent.md` |
 
 ### Output Files
 Format: `<agentName>.out.<run>.md`

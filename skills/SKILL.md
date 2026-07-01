@@ -15,5 +15,12 @@ Use this workflow for ElectraHub application delivery. Agents should keep EV cha
 - `02a-jira-steward`
 - `20-system-cartographer`
 - `30-refactor-scout`, `31-refactor-designer`
-- `40-coverage-sentinel`
-- `90-agent-governor`, `91-instruction-editor`, `92-k8s-capacity-advisor`
+- `40-coverage-sentinel`, `41-regression-sentinel`
+- `90-agent-governor`, `91-instruction-editor`, `92-k8s-capacity-advisor`, `93-observability-sentinel`
+
+## Shared References
+- `electrahub-service-catalog.md` - repository ownership and service/client map.
+- `current-platform-state.md` - current dev/prod, Cloudflare, k3d, Argo, TeamCity, observability, and charging-flow assumptions.
+- `logging-standard.md` - trace-aware logging and sensitive-data rules.
+- `observability-playbook.md` - Splunk/Grafana/Kubernetes incident triage.
+- `regression-playbook.md` - charging, SSE, OCPP/OCPI, CDR, dashboard, and JMeter validation.

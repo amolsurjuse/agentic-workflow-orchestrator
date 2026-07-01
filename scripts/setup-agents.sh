@@ -186,6 +186,21 @@ done
 echo "      Copied $REF_COUNT reference files"
 echo ""
 
+# Copy operational helper scripts used by workflow agents.
+echo "      Copying workflow helper scripts..."
+SCRIPTS_DEST="$TARGET_DIR/.github/agents/scripts"
+mkdir -p "$SCRIPTS_DEST"
+
+SCRIPT_COUNT=0
+for f in "$REPO_DIR/skills/scripts"/*; do
+    [ -f "$f" ] || continue
+    cp "$f" "$SCRIPTS_DEST/"
+    echo "      scripts/$(basename "$f")"
+    SCRIPT_COUNT=$((SCRIPT_COUNT + 1))
+done
+echo "      Copied $SCRIPT_COUNT helper scripts"
+echo ""
+
 # ── Step 5: Copy templates ──
 echo "[5/9] Copying templates..."
 TEMPLATES_DEST="$TARGET_DIR/.ai"
@@ -298,6 +313,7 @@ echo "    legacy cleanup                 $LEGACY_CLEANED removed"
 echo "    .github/agents/eh-*.agent.md   $COUNT agents + rules"
 echo "    .github/agents/skills/         $SKILL_COUNT skill files"
 echo "    .github/agents/references/     $REF_COUNT reference files"
+echo "    .github/agents/scripts/        $SCRIPT_COUNT helper scripts"
 echo "    .ai/                           $TPL_COUNT templates (without agent-commands.yml)"
 echo "    docs/agent-commands.yml        command reference"
 echo "    agentWork/                     output directory"

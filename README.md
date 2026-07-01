@@ -9,6 +9,8 @@ The workflow is tailored for ElectraHub domains such as EV charging backend serv
 - Sequenced ElectraHub delivery agents under `.github/agents/`.
 - Matching Codex skill instructions under `skills/agents/`.
 - Shared repo-wide references under `skills/references/`, including the ElectraHub logging standard.
+- Operational utility agents for Splunk/Grafana incident triage and charging-flow/JMeter regression validation.
+- Bundled helper scripts under `skills/scripts/` that are installed to `.github/agents/scripts/`.
 - Shared rules that every agent must read before acting.
 - A setup script that installs the agent package into a target ElectraHub repository.
 - Project templates for command mappings, Jira story structure, pull request notes, and project context.
@@ -85,9 +87,11 @@ Each runtime agent name includes the workflow sequence id. Agent files use the `
 | 30 | `30-refactor-scout` | Finds refactor opportunities and quality improvement areas. |
 | 31 | `31-refactor-designer` | Designs refactor plans before implementation. |
 | 40 | `40-coverage-sentinel` | Reviews test coverage and recommends focused coverage work. |
+| 41 | `41-regression-sentinel` | Runs and interprets charging-flow, JMeter, SSE, OCPP/OCPI, CDR, and dashboard regression checks. |
 | 90 | `90-agent-governor` | Maintains agent governance and workflow consistency. |
 | 91 | `91-instruction-editor` | Updates agent instructions safely. |
 | 92 | `92-k8s-capacity-advisor` | Reviews Kubernetes resource and capacity concerns. |
+| 93 | `93-observability-sentinel` | Investigates Splunk/Grafana/Kubernetes logs, traces, warnings, and production incidents. |
 
 ## Repository Structure
 
@@ -218,6 +222,22 @@ Agents are expected to call out impacts across relevant ElectraHub areas:
 - tenant, RBAC, and authorization boundaries
 - eventing, idempotency, retries, and failure recovery
 - Kubernetes resources, deployment config, and runtime capacity
+- Splunk/Grafana observability, trace correlation, and log-level correctness
+- TeamCity/JMeter regression evidence and load-test failure classification
+
+## Operations And Incident Workflows
+
+Use `93-observability-sentinel` for Splunk exports, Splunk URLs, trace ids, Grafana symptoms, Kubernetes warning floods, or production incidents.
+
+Use `41-regression-sentinel` for TeamCity regression runs, JMeter failures, charging-flow validation, SSE/OCPP meter-value checks, CDR generation, and dashboard analytics verification.
+
+Shared operational references live in `skills/references/`:
+
+- `electrahub-service-catalog.md`
+- `current-platform-state.md`
+- `observability-playbook.md`
+- `regression-playbook.md`
+- `logging-standard.md`
 
 ## Validation
 

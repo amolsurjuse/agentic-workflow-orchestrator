@@ -40,6 +40,9 @@ test:
   session: "mvn test -Dtest=*Session*Test"
   pricing: "mvn test -Dtest=*Pricing*Test,*Tariff*Test"
   billing: "mvn test -Dtest=*Billing*Test,*Cdr*Test"
+  charging_regression: "powershell -ExecutionPolicy Bypass -File scripts/jmeter/run-charging-regression.ps1"
+  jmeter_charging: "jmeter -n -t scripts/jmeter/03-full-e2e-charging-100-users.jmx"
+  sparky_regression: "jmeter -n -t scripts/jmeter/sparky-ai-support.jmx"
 
 lint:
   all: "make lint"
@@ -59,3 +62,15 @@ db:
   migrate: "mvn flyway:migrate"
   rollback: "mvn flyway:undo"
   status: "mvn flyway:info"
+
+observability:
+  splunk_export_summary: "powershell -ExecutionPolicy Bypass -File .github/agents/scripts/summarize-splunk-export.ps1 -Path <export-file>"
+  kubernetes_logs: "kubectl -n <namespace> logs deploy/<deployment> --since=30m"
+  kubernetes_events: "kubectl -n <namespace> get events --sort-by=.lastTimestamp"
+  grafana_port_forward: "kubectl -n monitoring port-forward svc/grafana 3000:80"
+
+platform:
+  argo_apps_dev: "kubectl -n argocd get applications.argoproj.io -o wide"
+  argo_apps_prod: "kubectl -n argocd get applications.argoproj.io -o wide"
+  prod_pods: "kubectl -n prod get pods -o wide"
+  dev_pods: "kubectl -n dev get pods -o wide"
