@@ -14,18 +14,24 @@ Use this document to capture reusable ElectraHub repository intelligence for AI-
 
 ## 2. Platform Inventory
 ### Backend Services
-- Service list (confirm exact repo names): api-gateway, auth-service, user-service, station-management-service, charger-management-service, ocpp-service/web-socket-connector, ocpi-service, session-service, pricing-service, billing-service, payment-service, notification-service.
+- Service list (canonical repo names): api-gateway, auth-service, user-service, station-management-service, charger-management-service, ocpp-service, web-socket-connector, ocpi-service, session-service, pricing-service, billing-service, payment-service, notification-service, subscription-service.
 - Runtime stack: Java/Spring Boot, Maven, REST/GraphQL where applicable, database migrations, Kubernetes deployment.
+- Current delivery/config source of truth: k8s-platform.
+- Legacy/imported deployment artifacts: kubernetes.
 
 ### Web Clients
-- Admin/operator portal purpose:
-- Driver portal purpose:
+- Admin/operator portal repo and purpose: admin-portal-ui.
+- Public org page repo and purpose: electra-hub-org-page.
+- Simulator UI source of truth: confirm `k8s-platform` TeamCity config. Current known config builds `ocpp-simulator-ui` from `ocpi-simulator/ui`; do not assume standalone `ocpi-simulator-ui` is deployed.
 - Angular apps and purpose:
 - React apps and purpose:
 
 ### Mobile Clients
-- iOS driver app(s) and purpose:
-- Android app(s) and purpose (if any):
+- iOS driver app repo and purpose: driver-portal-ios.
+- Android app repo and purpose (if any):
+
+### Repository URLs
+Use `skills/references/electrahub-service-catalog.md` for canonical Git URLs before cloning or assigning ownership.
 
 ## 3. Protocol Inventory (Charging)
 - OCPP scope in ElectraHub: charger connection management, BootNotification, Heartbeat, StatusNotification, Authorize, StartTransaction/StopTransaction, MeterValues, RemoteStartTransaction/RemoteStopTransaction, diagnostics/firmware where supported.
@@ -59,6 +65,7 @@ Use this document to capture reusable ElectraHub repository intelligence for AI-
 - Shared libraries:
 - Infrastructure folders:
 - Configuration directories:
+- If a UI repo appears duplicated, verify build ownership in `k8s-platform/scripts/teamcity/*.json` and Helm values before editing.
 
 ## 6. API / Contract Matrix
 | Consumer | Interface | Endpoint / Topic / Channel | Owner Service | Auth Model |
