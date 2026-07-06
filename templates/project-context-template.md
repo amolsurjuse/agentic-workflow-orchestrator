@@ -28,7 +28,7 @@ Use this document to capture reusable ElectraHub repository intelligence for AI-
 
 ### Mobile Clients
 - iOS driver app repo and purpose: driver-portal-ios.
-- Android app repo and purpose (if any):
+- Android driver app repo and purpose: driver-portal-android.
 
 ### Repository URLs
 Use `skills/references/electrahub-service-catalog.md` for canonical Git URLs before cloning or assigning ownership.
@@ -147,7 +147,7 @@ For each story, mark impacted areas:
 ## 12. Delivery Conventions
 - Branch naming:
 - Commit message format:
-- Jira linking rules:
+- External work tracking/linking rules:
 - PR template and reviewer expectations:
 
 ## 13. Known Constraints / Risks

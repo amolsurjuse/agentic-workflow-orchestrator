@@ -14,7 +14,7 @@ This file contains shared rules that apply to **ALL agents** in the workflow. Ea
 
 **Applies to**: All agents
 
-This orchestrator is tuned for **ElectraHub**, an EV charging platform. Treat every feature, review, test plan, Jira story, and PR as part of ElectraHub unless the user explicitly says otherwise.
+This orchestrator is tuned for **ElectraHub**, an EV charging platform. Treat every feature, review, test plan, chat requirement, and PR as part of ElectraHub unless the user explicitly says otherwise.
 
 ### Product/domain assumptions
 - Domain: EV charging, charger operations, driver experience, partner roaming, billing, pricing, payments, and station administration.
@@ -33,7 +33,7 @@ This orchestrator is tuned for **ElectraHub**, an EV charging platform. Treat ev
 - When a story touches charging behavior, include at least one concrete scenario using ElectraHub domain language, for example connector status transitions, remote start/stop, tariff lookup failure, CDR generation, or OCPI peer payload compatibility.
 - For backend config changes, call out Kubernetes/config governance and secret handling.
 - For user-facing changes, identify the affected ElectraHub client surface: admin portal, driver portal, iOS app, partner/OCPI API, or charger/OCPP integration.
-- Do not leave generic placeholders such as "service/module" or "business outcome" unresolved when ElectraHub-specific names can be inferred from the Jira story or repository context.
+- Do not leave generic placeholders such as "service/module" or "business outcome" unresolved when ElectraHub-specific names can be inferred from the chat requirement or repository context.
 
 ## 0. Agent Identification (MANDATORY)
 
@@ -68,18 +68,17 @@ Before doing ANY other work, read the latest `/agentWork/<WORK_ID>/01-launchpad.
 - Workspace status shows `[OK] Workspace is ready for feature work`
 
 **If verification fails:**
-1. **STOP IMMEDIATELY** — do not proceed
-2. **Do NOT create `01-launchpad.out.*.md` yourself** — only `01-launchpad` can do this
+1. **STOP IMMEDIATELY** â€” do not proceed
+2. **Do NOT create `01-launchpad.out.*.md` yourself** â€” only `01-launchpad` can do this
 3. **Do NOT fake or simulate 01-launchpad preparation**
 4. **Hand off to `01-launchpad`** or inform the user to run it first
 
 ### Work ID
 Every run must have a `WORK_ID`.
-- If the input contains a Jira key, use that exact key as `WORK_ID`.
-- If the input contains only a requirement description, generate `WORK_ID` as `REQ-<YYYYMMDD>-<slug>` using the current date and a concise kebab-case slug from the description.
+- Generate `WORK_ID` as `REQ-<YYYYMMDD>-<slug>` using the current date and a concise kebab-case slug from the chat requirement.
+- If the user includes an external ticket key, treat it as requirement context only. Do not fetch or update external tracking systems.
 - Use `WORK_ID` consistently for `/agentWork/<WORK_ID>/...`, branch names, handoffs, and output headers.
-- Never block the workflow only because a Jira key is missing when a usable requirement description is present.
-
+- Never block the workflow because a external ticket key is missing when a usable chat requirement is present.
 ---
 
 ## 2. Command Reference (REQUIRED)
@@ -103,7 +102,7 @@ When `00-command-cartographer` is used, it must:
 - Example: `<test.backend>` -> look up `test.backend` -> run mapped command
 - Example: `<lint.all>` -> look up `lint.all` -> run mapped command
 
-**Never guess commands** — always check the reference file first.
+**Never guess commands** â€” always check the reference file first.
 
 ### Token-Saver Execution Profile (MANDATORY)
 
@@ -128,36 +127,15 @@ Use this fixed flow to reduce token usage and avoid repeated repo discovery:
 6. Reuse node outputs instead of re-scanning:
    - Node 2+ should consume `/agentWork/...` artifacts first.
 
-### Jira operations via Atlassian MCP Server
+### Requirement Source And External Tracking
 
-Jira read/write actions use the Atlassian MCP server.
+Workflow requirements come from the active chat conversation.
 
-- Use function-name calls first (`getJiraIssue`, `searchJiraIssuesUsingJql`, etc.); prefixed variants are fallback only.
-- Default `cloudId`: `3a404367-e930-4995-a7fe-b1876a7c9b76`.
-- Call `getAccessibleAtlassianResources` only if default cloudId fails.
-- Always pass `responseContentFormat: "markdown"` when reading issues.
-
-**VS Code MCP setup**: The Atlassian MCP server must be registered in `.vscode/mcp.json` (NOT in `settings.json`):
-```json
-{
-  "servers": {
-    "atlassian": {
-      "type": "http",
-      "url": "https://mcp.atlassian.com/v1/mcp"
-    }
-  }
-}
-```
-This file is installed automatically by `setup-agents.sh`. If Jira MCP is unavailable, verify `.vscode/mcp.json` exists in the project root and restart VS Code.
-
-**Behavioral rules:**
-- For Jira pull/read requests, do NOT run terminal readiness checks — Jira MCP does not use the terminal.
-- If MCP tools are discovered but a call fails, report the failure as a Jira MCP request error (auth/permission/network), not "tools unavailable."
-- Do not add MCP tool names (e.g. `atlassian/getJiraIssue`) to `tools:` frontmatter — MCP tools are discovered at runtime by function name only.
-- Do not suggest "enable terminal tools" when Jira MCP is the required path.
-- `01-launchpad` fallback: if Jira MCP is unavailable/fails, ask user for a brief description and continue (do not hard-stop).
-- For Jira-only utility actions (`02a-jira-steward pull KAN-3`): if MCP is not connected, emit Rule 5 hard-stop only.
-- Do not return fallback option menus for Jira pull requests.
+- Do not require any external issue tracker connection for feature delivery.
+- Do not fetch, search, create, or update external issue tracker records from the core workflow agents.
+- If the user pastes a ticket id, preserve it as plain text context in the work packet.
+- If the chat requirement is incomplete, ask the user for the missing details directly in chat.
+- `01-launchpad` is responsible for creating the generated `REQ-*` work id and persisting the original requirement text.
 
 ---
 
@@ -171,7 +149,7 @@ Before executing any work commands:
 3. If no response/error, retry after a short wait
 4. Continue only after terminal readiness is confirmed
 
-Jira-only requests that do not require terminal commands must skip terminal readiness.
+
 
 Path standardization for terminal actions:
 - Run `cd <root>` once, then keep all commands in that same root context.
@@ -217,9 +195,9 @@ Invocation: "<exact invocation prompt>"
 
 ---
 
-## 5. Environment Issues — STOP and Escalate (MANDATORY)
+## 5. Environment Issues â€” STOP and Escalate (MANDATORY)
 
-**Applies to**: All agents — **NO EXCEPTIONS**
+**Applies to**: All agents â€” **NO EXCEPTIONS**
 
 This is a HARD STOP rule.
 
@@ -283,8 +261,8 @@ Format: `<agentName>.out.<run>.md`
 
 ### Branch Names
 Format: `feature/<WORK_ID>-<kebab-case-description>`
-- Example with Jira: `feature/EHB-1234-add-analytics-api`
-- Example without Jira: `feature/REQ-20260501-add-analytics-api`
+- Example with external issue tracker: `feature/EHB-1234-add-analytics-api`
+- Example without external issue tracker: `feature/REQ-20260501-add-analytics-api`
 
 ---
 
@@ -294,7 +272,7 @@ Format: `feature/<WORK_ID>-<kebab-case-description>`
 
 - Use frontmatter handoff definitions to route next
 - Replace `<WORK_ID>` placeholders with the actual work id
-- Replace `<JIRA_KEY>` placeholders with the actual Jira key only when one exists; otherwise use `<WORK_ID>`
+- Replace `<WORK_ID>` placeholders with the actual external ticket key only when one exists; otherwise use `<WORK_ID>`
 - Include relevant context in handoff prompt
 - Route based on pass/fail outcomes
 

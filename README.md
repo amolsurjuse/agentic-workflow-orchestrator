@@ -1,6 +1,6 @@
 # ElectraHub Agentic Workflow Orchestrator
 
-ElectraHub Agentic Workflow Orchestrator is a Codex/GitHub agent package for running a structured delivery workflow across ElectraHub applications. It installs a sequenced set of agents into a target ElectraHub repository and gives those agents shared rules, handoff files, command mappings, and templates so feature work can move from requirement capture through implementation, validation, review, hardening, documentation, and release.
+ElectraHub Agentic Workflow Orchestrator is a Codex/GitHub agent package for running a structured delivery workflow across ElectraHub applications. It installs a sequenced set of agents into a target ElectraHub repository and gives those agents shared rules, handoff files, command mappings, repository references, and templates so feature work can move from chat requirement capture through implementation, validation, review, hardening, documentation, and release.
 
 The workflow is tailored for ElectraHub domains such as EV charging backend services, admin and driver clients, OCPP charger integrations, OCPI roaming integrations, station management, pricing, billing, sessions, connector status, payments, CDRs, RBAC, tenant behavior, and Kubernetes-backed operations.
 
@@ -8,36 +8,26 @@ The workflow is tailored for ElectraHub domains such as EV charging backend serv
 
 - Sequenced ElectraHub delivery agents under `.github/agents/`.
 - Matching Codex skill instructions under `skills/agents/`.
-- Shared repo-wide references under `skills/references/`, including the ElectraHub logging standard.
+- Shared repo-wide references under `skills/references/`, including the ElectraHub service catalog and logging standard.
 - Operational utility agents for Splunk/Grafana incident triage and charging-flow/JMeter regression validation.
 - Bundled helper scripts under `skills/scripts/` that are installed to `.github/agents/scripts/`.
 - Shared rules that every agent must read before acting.
-- A setup script that installs the agent package into a target ElectraHub repository.
-- Project templates for command mappings, Jira story structure, pull request notes, and project context.
-- Support for either Jira-key driven work or plain description-only requirements.
+- A setup script that installs the agent package into a target ElectraHub repository without external issue-tracker configuration.
+- Project templates for command mappings, pull request notes, and project context.
+- Chat-first requirement capture with generated local work ids.
 
-## Requirement Input Modes
+## Requirement Input Mode
 
-The workflow can start from a Jira issue or from a plain requirement description.
-
-```text
-@01-launchpad EH-1234 add charger tariff preview
-```
+The workflow starts from the requirement text provided in chat.
 
 ```text
 @01-launchpad add charger tariff preview to the station management UI
 ```
 
-When a Jira key is present, the agents use it as the workflow work id.
+`01-launchpad` creates a local requirement id from the date and description.
 
 ```text
-WORK_ID=EH-1234
-```
-
-When no Jira key is present, `01-launchpad` creates a local requirement id from the date and description.
-
-```text
-WORK_ID=REQ-20260501-add-tariff-preview
+WORK_ID=REQ-20260705-add-charger-tariff-preview
 ```
 
 All agent handoffs and outputs are written under:
@@ -46,7 +36,20 @@ All agent handoffs and outputs are written under:
 /agentWork/<WORK_ID>/
 ```
 
-This lets ElectraHub work continue even when a Jira ticket has not been created yet. The `02a-jira-steward` agent can later create or update Jira from the local requirement record.
+If the user includes an external ticket id, agents preserve it as plain text context only. Core workflow agents do not fetch, create, or update external issue tracker records.
+
+## Launchpad Preparation Gate
+
+`01-launchpad` is the mandatory first step for feature delivery. It must finish these checks before handing off:
+
+- Verify terminal readiness.
+- Verify required tools: Git, Node.js, npm, Python, JDK, Maven, and Docker.
+- Install missing required tools through the approved workspace or OS package manager when possible, then re-check versions.
+- Read `skills/references/electrahub-service-catalog.md`.
+- Check out missing canonical ElectraHub repositories into the configured workspace root.
+- Fetch existing repositories and record branch plus dirty/clean state without discarding local work.
+- Capture the requirement from chat and generate `REQ-<YYYYMMDD>-<slug>`.
+- Persist `/agentWork/<WORK_ID>/01-launchpad.out.<RUN>.md` with the toolchain and repository checkout matrix.
 
 ## Main Feature Workflow
 
@@ -64,16 +67,13 @@ This lets ElectraHub work continue even when a Jira ticket has not been created 
   -> optional 10a-conflict-stabilizer
 ```
 
-Each runtime agent name includes the workflow sequence id. Agent files use the `eh-` file prefix, while runtime names avoid the `electrahub-` prefix for cleaner invocation.
-
 ## Agents
 
 | Sequence | Runtime agent | Purpose |
 | --- | --- | --- |
 | 00 | `00-command-cartographer` | Builds and maintains `/docs/agent-commands.yml` after user approval. |
-| 01 | `01-launchpad` | Starts a workflow from Jira or description-only input and creates the first work packet. |
-| 02 | `02-story-forger` | Converts the requirement into an implementation-ready story. |
-| 02a | `02a-jira-steward` | Pulls, creates, or updates Jira issues when Jira integration is needed. |
+| 01 | `01-launchpad` | Prepares the workspace, checks out ElectraHub repositories, verifies tools, and captures the chat requirement. |
+| 02 | `02-story-forger` | Converts the chat requirement into an implementation-ready story. |
 | 03 | `03-impact-mapper` | Maps impacted services, clients, APIs, data, tests, and Kubernetes areas. |
 | 04 | `04-delivery-architect` | Produces the implementation plan and sequencing. |
 | 05 | `05-change-builder` | Implements the approved code changes. |
@@ -92,48 +92,6 @@ Each runtime agent name includes the workflow sequence id. Agent files use the `
 | 91 | `91-instruction-editor` | Updates agent instructions safely. |
 | 92 | `92-k8s-capacity-advisor` | Reviews Kubernetes resource and capacity concerns. |
 | 93 | `93-observability-sentinel` | Investigates Splunk/Grafana/Kubernetes logs, traces, warnings, and production incidents. |
-
-## Repository Structure
-
-```text
-agentic-workflow-orchestrator/
-├── .github/
-│   └── agents/
-│       ├── agent-rules.md
-│       ├── eh-00-command-cartographer.agent.md
-│       ├── eh-01-launchpad.agent.md
-│       ├── eh-02-story-forger.agent.md
-│       ├── eh-02a-jira-steward.agent.md
-│       ├── eh-03-impact-mapper.agent.md
-│       ├── eh-04-delivery-architect.agent.md
-│       ├── eh-05-change-builder.agent.md
-│       ├── eh-06-verification-runner.agent.md
-│       ├── eh-07-risk-reviewer.agent.md
-│       ├── eh-08-quality-hardener.agent.md
-│       ├── eh-09-release-scribe.agent.md
-│       ├── eh-10-release-conductor.agent.md
-│       ├── eh-10a-conflict-stabilizer.agent.md
-│       ├── eh-20-system-cartographer.agent.md
-│       ├── eh-30-refactor-scout.agent.md
-│       ├── eh-31-refactor-designer.agent.md
-│       ├── eh-40-coverage-sentinel.agent.md
-│       ├── eh-90-agent-governor.agent.md
-│       ├── eh-91-instruction-editor.agent.md
-│       └── eh-92-k8s-capacity-advisor.agent.md
-├── scripts/
-│   └── setup-agents.sh
-├── skills/
-│   ├── SKILL.md
-│   ├── agents/
-│   └── references/
-│       └── workflow-menu.md
-├── templates/
-│   ├── agent-commands.yml
-│   ├── jira-template.md
-│   ├── pr-template.md
-│   └── project-context-template.md
-└── README.md
-```
 
 ## Install Into an ElectraHub Repository
 
@@ -169,29 +127,11 @@ After installation, edit the generated file in the target repository:
 docs/agent-commands.yml
 ```
 
-This file is the command contract used by the agents. It should include exact ElectraHub commands for the repository, such as:
-
-- build commands
-- unit test commands
-- integration test commands
-- frontend test commands
-- lint and formatting commands
-- service-specific validation commands
-- Kubernetes or deployment checks when relevant
-
-Agents should use this file instead of guessing commands.
+This file is the command contract used by the agents. It should include exact ElectraHub commands for the repository, such as build, test, lint, service validation, and Kubernetes checks. Agents should use this file instead of guessing commands.
 
 ## Recommended First Run
 
-From the target ElectraHub repository, start with `01-launchpad`.
-
-With Jira:
-
-```text
-@01-launchpad EH-1234 implement connector tariff preview in station management
-```
-
-Without Jira:
+From the target ElectraHub repository, start with `01-launchpad` and provide the requirement in chat:
 
 ```text
 @01-launchpad implement connector tariff preview in station management
@@ -199,15 +139,14 @@ Without Jira:
 
 Then follow the next-agent recommendation written in `/agentWork/<WORK_ID>/`.
 
-## Jira Behavior
+## External Tracking Behavior
 
-Jira is optional at workflow start.
+External issue tracker integrations are not required or configured by this orchestrator.
 
-- If a Jira key is provided, agents use Jira as the requirement source.
-- If only a description is provided, agents create a local `REQ-*` work id and continue.
-- If Jira tools are available but issue retrieval fails, agents should report the Jira request failure clearly.
-- If Jira lookup fails but the user provided a useful description, `01-launchpad` can continue from that description.
-- `02a-jira-steward` can create or update a Jira issue later from the local work packet.
+- Requirements are captured directly from chat.
+- Work ids are generated as `REQ-<YYYYMMDD>-<slug>`.
+- External ticket ids, if pasted by the user, are stored as plain context only.
+- Core workflow agents do not fetch, create, or update external issue tracker records.
 
 ## ElectraHub Domain Checks
 
@@ -238,33 +177,3 @@ Shared operational references live in `skills/references/`:
 - `observability-playbook.md`
 - `regression-playbook.md`
 - `logging-standard.md`
-
-Current cross-service design documents live in `docs/`, including:
-
-- `ElectraHub_Application_Design_Document.md`
-- `ElectraHub_Card_Present_Payment_Simulation_Design.md`
-
-## Validation
-
-For this repository, basic validation is:
-
-```bash
-bash -n scripts/setup-agents.sh
-git diff --check
-```
-
-For a target ElectraHub repository, use the commands configured in:
-
-```text
-docs/agent-commands.yml
-```
-
-## Maintenance Notes
-
-- Keep `.github/agents/` and `skills/agents/` aligned when adding, removing, or renaming agents.
-- Keep shared references in `skills/references/` aligned with service standards such as logging and observability.
-- Keep runtime agent names sequenced and concise.
-- Keep file names using the `eh-` abbreviation.
-- Keep `agent-rules.md` as the shared source of workflow behavior.
-- Do not add generic social media or non-delivery artifacts to this repository.
-- Re-run `setup-agents.sh` after changing agents, skills, templates, or workflow references.

@@ -1,11 +1,12 @@
 # ElectraHub Pull Request Template (AI Delivery)
 
 ## Title
-`[JIRA-KEY] <short technical summary>`
+`[WORK_ID] <short technical summary>`
 
-## Jira Reference
-- Story/Ticket:
-- Requirement link:
+## Work Reference
+- Work ID:
+- Requirement source: chat
+- Requirement summary:
 
 ## Branching
 - Base branch: `develop` (unless explicitly overridden)
@@ -29,6 +30,7 @@
 - Admin/operator portal impact:
 - Driver portal impact:
 - iOS driver app impact:
+- Android driver app impact:
 - Partner/OCPI API impact:
 - Charger/OCPP integration impact:
 
@@ -39,7 +41,7 @@
 - Tenant/RBAC impact:
 
 ## Files / Components Impacted
-- 
+-
 
 ## Implementation Notes
 - Design choices made:
@@ -61,6 +63,7 @@
 - Admin/operator portal scenario(s):
 - Driver portal scenario(s):
 - iOS driver app scenario(s):
+- Android driver app scenario(s):
 
 ### Charging Domain Validation
 - Connector/session scenario(s):
@@ -78,29 +81,3 @@
 - Placement mapping (`config.data` / `env` / `secrets.env` / `extraSecretEnv`):
 - `k8s-platform` files updated:
 - Alignment check command and output summary:
-
-## Backward Compatibility
-- Compatibility impact:
-- Consumer impact:
-
-## Risks and Mitigations
-- 
-
-## Rollout Plan
-- 
-
-## Rollback Plan
-- 
-
-## Reviewer Checklist
-- [ ] Scope matches approved plan
-- [ ] Acceptance criteria satisfied
-- [ ] Tests are adequate and passing
-- [ ] OCPP/OCPI impact reviewed where applicable
-- [ ] Connector/session behavior reviewed where applicable
-- [ ] Tariff/payment/CDR behavior reviewed where applicable
-- [ ] Admin/driver/iOS impact reviewed where applicable
-- [ ] Tenant/RBAC boundaries reviewed where applicable
-- [ ] K8 config governance evidence included when backend config keys changed
-- [ ] No unrelated changes included
-- [ ] Risk notes and rollout guidance are clear

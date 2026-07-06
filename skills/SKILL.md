@@ -1,6 +1,6 @@
 ---
 name: agentic-workflow-orchestrator
-description: ElectraHub-tuned orchestration system for launch readiness, story shaping, impact mapping, delivery architecture, change building, verification, risk review, release notes, and shipping across EV charging services, clients, OCPP, OCPI, pricing, billing, and Kubernetes operations.
+description: ElectraHub-tuned orchestration system for launch readiness, chat requirement shaping, impact mapping, delivery architecture, change building, verification, risk review, release notes, and shipping across EV charging services, clients, OCPP, OCPI, pricing, billing, and Kubernetes operations.
 ---
 
 # ElectraHub Agentic Workflow Orchestrator
@@ -12,7 +12,6 @@ Use this workflow for ElectraHub application delivery. Agents should keep EV cha
 
 ## Utility Agents
 - `00-command-cartographer`
-- `02a-jira-steward`
 - `20-system-cartographer`
 - `30-refactor-scout`, `31-refactor-designer`
 - `40-coverage-sentinel`, `41-regression-sentinel`
