@@ -63,6 +63,19 @@ Remove the middle connector-detail step from the simulator driver flow. When a u
 - Validation:
   - `npm.cmd run build` passed in `C:\development\project\ocpi-simulator\ui`.
 - Deployment:
+  - Source commit: `bb1abd9 Fix simulator HMI plug and unplug state`
+  - UI build: `ElectraHub_OcppSimulatorUi_Build/930`
+  - UI image: `amolsurjuse/ocpi-simulator-ui:37`
+  - Bundled simulator build: `ElectraHub_OcppSimulator_Build/931`
+  - Bundled simulator image: `amolsurjuse/ocpi-simulator:25`
+  - Production deployment updated:
+    - `ocpp-simulator-ui` -> `amolsurjuse/ocpi-simulator-ui:37`
+    - `ocpp-simulator` -> `amolsurjuse/ocpi-simulator:25`
+  - Live validation:
+    - `https://ocpp-simulator.electrahub.net/` now serves `main-QMBPLDUF.js`.
+    - Confirmed the live bundle contains `Security code required`, `verify-code`, `connectorStatusOverrides`, and `effectiveConnectorStatus`.
+    - Confirmed `https://ocpp-simulator.electrahub.net/api/v1/chargers?limit=3` returns JSON charger data.
+- Deployment:
   - Source commit: `06f552b Require security code before simulator unplug`
   - UI build: `ElectraHub_OcppSimulatorUi_Build/928`
   - UI image: `amolsurjuse/ocpi-simulator-ui:36`
