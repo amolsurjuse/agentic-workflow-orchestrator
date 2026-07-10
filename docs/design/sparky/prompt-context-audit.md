@@ -47,7 +47,7 @@ Source: `DriverPortalIOS/Models/ChatContext.swift`
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Map / charger detail | `Is this charger available?` | `screen=map`, `audience=driver`; when a charger detail is loaded: `resourceType=charger`, `resourceId=chargerId`, `chargerId`, `connectorId`, `locationId` | `check_charger_availability` | Direct yes/no based on live `availablePorts`, `busyPorts`, charger status, and connector `available` | [x] | [x] | Recently fixed so charger detail publishes selected charger context. |
 | Map / charger detail | `What does this status mean?` | Same as map context above | Usually `driver_support_context` or `check_charger_liveness` if message mentions online/offline/heartbeat | Explain visible status using live charger facts; if context missing, say live status cannot be confirmed | [x] | [~] | No dedicated status-explanation route yet; LLM/fallback uses diagnostics. |
-| Map / charger detail | `Find another CCS charger` | Same as map context above; no search radius/user location passed | `driver_support_context` | Should explain current backend cannot perform charger search and suggest using map filter/search | [~] | [~] | Backend has no charger search tool; user location/filter context is not sent. |
+| Map / charger detail | `Find another CCS charger` | Same as map context above; selected charger detail sends `chargerId`, `connectorId`, and `locationId` | `find_charger_alternatives` | Search live charger GraphQL inventory for available CCS connectors, exclude the selected charger, sort by distance when the selected charger has coordinates, and return concrete alternatives | [x] | [x] | Uses selected charger coordinates as the reference point; map viewport bounds/user GPS are still future enhancements. |
 | Live Charging | `Why is charging stuck?` | `screen=liveCharging`, `resourceType=charging`, `audience=driver`; currently no active `sessionId`/charger context from `MainTabView` | `diagnose_session_state` when message contains `stuck` or `preparing` | Explain Preparing/stuck state and include live session/meter facts if session context exists | [ ] | [~] | Needs active session context from `LiveChargingView` into `MainTabView`. |
 | Live Charging | `Why did start fail?` | `screen=liveCharging`, `resourceType=charging`, no selected session | `diagnose_charging_start` when message mentions `503`, `unavailable`, or related terms; otherwise generic | Explain OCPP routing, charger connection, connector availability, existing session, and payment checks | [ ] | [~] | Prompt wording may not hit the 503/unavailable route; backend should add explicit start-failure detection. |
 | Live Charging | `Is my charger online?` | `screen=liveCharging`, `resourceType=charging`, no selected charger | `check_charger_liveness` | Explain heartbeat/OCPP connection state if `chargerId` is present; otherwise state missing charger context | [ ] | [x] | Needs live charging charger context. |
@@ -120,6 +120,7 @@ It does not send selected row IDs (`sessionId`, `chargerId`, `connectorId`, `loc
 | `diagnose_active_connector` | already_active/already active/in progress | No | Check existing session for connector and whether it belongs to driver |
 | `diagnose_session_state` | stuck/preparing | No | Check session state, meter movement, charger offline/busy/no meter updates |
 | `check_charger_liveness` | online/offline/heartbeat | No | Check OCPP heartbeat and connection status |
+| `find_charger_alternatives` | Find another/nearby charger/another CCS/search charger | Yes | Fetch live charger GraphQL inventory, filter available matching connector standards, exclude current charger, sort by distance from selected charger when possible |
 | `driver_support_context` | Fallback | No | General support answer enriched with available backend facts |
 
 ## Prompt Quality Checklist
@@ -135,6 +136,7 @@ It does not send selected row IDs (`sessionId`, `chargerId`, `connectorId`, `loc
 | Admin waiting indicator | Chat shows working state while loading | [x] | Admin UI shows `Checking ElectraHub context...` |
 | Backend availability correctness | Availability answer cannot contradict live facts | [x] | `check_charger_availability` exact deterministic route |
 | Backend exact project flows | Known sensitive flows bypass LLM contradiction | [x] | Exact routes for idle stop, simulator unplug, card-present, revenue, availability |
+| Backend charger alternatives | Find-another-charger answers backed by live charger inventory | [x] | `find_charger_alternatives` uses charger GraphQL list/detail data |
 | Backend analytics questions | Spend/kWh/most-used station answers backed by APIs | [ ] | No aggregation/history diagnostic source yet |
 | Backend pricing questions | Price plan/tariff comparison backed by APIs | [ ] | No pricing-service diagnostic source yet |
 
@@ -163,6 +165,19 @@ Live production spot checks passed for:
 | `How much did I spend last month?` | `explain_spend_analytics_gap` | States monthly spend needs dated receipt/session aggregation API |
 | `Why did start fail?` | `diagnose_charging_start` | Explains likely start-failure causes and states exact live diagnosis needs selected charger/connector/session |
 | `Why is a session still idle after remote stop?` | `diagnose_idle_remote_stop` | Gives admin diagnostic steps for session-service, ocpp-service, simulator Redis/status/unplug/receipt flow |
+
+## 2026-07-10 Charger Search Fix
+
+The `Find another CCS charger` prompt no longer returns a dead-end gap answer. Sparky now:
+
+- uses the selected charger as context
+- reads the selected charger's coordinates from charger GraphQL
+- queries live OCPI charger inventory near that point
+- filters to available connectors matching CCS/CCS1/CCS2/CHAdeMO intent
+- excludes the charger the user is already viewing
+- returns concrete charger, connector, location, distance, and power details when available
+
+Regression coverage was added in `DiagnosticAnswerServiceTest` for both successful alternative lookup and no-result lookup.
 
 ## Recommended Follow-Up Implementation Plan
 
