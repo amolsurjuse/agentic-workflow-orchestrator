@@ -1,6 +1,7 @@
 # Sparky Prompt And Context Audit
 
 Last audited: 2026-07-10
+Last validated: 2026-07-10
 
 ## Scope
 
@@ -136,6 +137,32 @@ It does not send selected row IDs (`sessionId`, `chargerId`, `connectorId`, `loc
 | Backend exact project flows | Known sensitive flows bypass LLM contradiction | [x] | Exact routes for idle stop, simulator unplug, card-present, revenue, availability |
 | Backend analytics questions | Spend/kWh/most-used station answers backed by APIs | [ ] | No aggregation/history diagnostic source yet |
 | Backend pricing questions | Price plan/tariff comparison backed by APIs | [ ] | No pricing-service diagnostic source yet |
+
+## 2026-07-10 Validation Update
+
+After the initial audit, live validation found that Ollama was over-generalizing weak fallback answers for:
+
+- `Why did start fail?`
+- `How much did I spend last month?`
+- `Show last receipt`
+- `Why is a session still idle after remote stop?`
+
+Fixes applied:
+
+- Added exact deterministic backend routes for start failure, stuck/preparing state, receipt lookup without selected session, missing spend analytics, missing usage analytics, missing trip telemetry, missing pricing context, and charger search gaps.
+- Expanded `DiagnosticAnswerServiceTest` with prompt-regression tests for the documented weak prompts.
+- Updated the Ollama `electrahub-sparky` Modelfile and runtime prompt rules so the model must preserve authoritative fallback limitations and must not invent spend, kWh, station, trip, receipt, pricing, card, wallet, charger, or session values.
+- Rebuilt the local Ollama `electrahub-sparky` model from the updated Modelfile.
+- Deployed `ai-support-service` image `20260710-sparky-prompt-audit-r2`.
+
+Live production spot checks passed for:
+
+| Prompt | Expected route | Live result |
+| --- | --- | --- |
+| `Show last receipt` | `explain_receipt_lookup` | Asks user to open/select a specific history receipt; no unrelated wallet facts |
+| `How much did I spend last month?` | `explain_spend_analytics_gap` | States monthly spend needs dated receipt/session aggregation API |
+| `Why did start fail?` | `diagnose_charging_start` | Explains likely start-failure causes and states exact live diagnosis needs selected charger/connector/session |
+| `Why is a session still idle after remote stop?` | `diagnose_idle_remote_stop` | Gives admin diagnostic steps for session-service, ocpp-service, simulator Redis/status/unplug/receipt flow |
 
 ## Recommended Follow-Up Implementation Plan
 
