@@ -1,14 +1,14 @@
-# ElectraHub Charging Flow Animation Skill
+﻿# ElectraHub End-to-End Session Flow Guide
 
-Purpose: give an animation or visualization agent enough precise service, API, event, datastore, and state-transition context to create accurate end-to-end animations for ElectraHub charging requests. Treat this as a source map for scenes, sequence diagrams, explainer videos, swimlanes, and service interaction animations.
+Purpose: provide a precise service, API, event, datastore, and state-transition guide for ElectraHub driver sessions. Treat this as a source map for sequence diagrams, explainer videos, swimlanes, service walkthroughs, and operational documentation.
 
 Last mapped: 2026-07-10.
 
-Companion animation: open `docs/design/charging-flow-animation.html` in a browser for an interactive walkthrough of these flows.
+Companion interactive walkthrough: open `docs/design/charging-flow-walkthroughs.html` in a browser to step through these flows.
 
 ## How To Use This Skill
 
-Use this file as the canonical animation brief for ElectraHub charging/session/payment flows. For every animation:
+Use this file as the canonical flow brief for ElectraHub driver session and payment flows. For every walkthrough:
 
 1. Start with the user-facing actor: mobile driver app, admin portal, OCPI partner, or OCPP simulator/charger.
 2. Show the ingress path: public domain -> API gateway -> routed service, or charger WebSocket -> OCPP service.
@@ -20,11 +20,11 @@ Use this file as the canonical animation brief for ElectraHub charging/session/p
 8. Show Elasticsearch as searchable/read-optimized projection boxes.
 9. End each request with what the app polls or streams back to the user.
 
-Animation rule: never show a receipt as the end of a remote stop for an idle-fee session until unplug is confirmed. Remote stop pauses charging; physical unplug ends the billable idle state.
+Flow rule: never show a receipt as the end of a remote stop for an idle-fee session until unplug is confirmed. Remote stop pauses charging; physical unplug ends the billable idle state.
 
 ## System Actors
 
-| Actor | Role In Animation | Typical Entry Point |
+| Actor | Role In Flow | Typical Entry Point |
 | --- | --- | --- |
 | Driver iOS app | Starts/stops charging, watches active session, opens simulator iframe/link, views receipt | `https://api.electrahub.net/session/**`, `https://api.electrahub.net/charger/graphql` |
 | Driver Android app | Same driver behavior as iOS | Same gateway routes |
@@ -74,7 +74,7 @@ Important route targets from `api-gateway/src/main/resources/application.yaml`:
 | `/notifications/**` | `notification-service:8085/notifications` |
 | `/ai/**` | `ai-support-service:8094` |
 
-Gateway authorization notes for animation:
+Gateway authorization notes:
 
 - Driver routes generally require `USER`.
 - Admin session read uses `/session/api/v1/sessions/admin/**` and allows `SYSTEM_ADMIN` or `ADMIN_READ_ONLY`.
@@ -93,9 +93,11 @@ Main durable tables/entities:
 | `ChargingSession` | Canonical session lifecycle record. Stores session id, user account id, station id, charger id, connector ref/id, OCPP transaction id, status, meter start/stop, energy kWh, current power, cost totals, idle fee fields, subscription fields, payment authorization/transaction fields, simulator security code, remote stop timestamp. |
 | `MeterValue` | Per-session meter samples. Stores session id, station id, connector id number, measurand, value, unit, timestamp. |
 | Session events | Audit trail for lifecycle events like `OCPP_START_TRANSACTION`, `OCPP_METER_VALUES`, `OCPP_STOP_TRANSACTION`, `PAYMENT_SETTLED`, `RECEIPT_GENERATED`. |
-| Elasticsearch `CurrentSessionDocument` | Read/search projection for active and admin session views. |
+| Elasticsearch `CurrentSessionDocument` | Read/search projection for active and admin session views. Stored in `session-current-sessions` while the session is active. |
+| Elasticsearch `OcpiSessionHistoryDocument` | Completed-session history projection. Stored in `session-history` during receipt finalization and used for search/reporting style reads. |
+| Elasticsearch driver stats document | Per-driver aggregate projection updated after a completed session is processed. |
 
-Session statuses used in animations:
+Session statuses used in flows:
 
 | Status | Meaning |
 | --- | --- |
@@ -110,7 +112,7 @@ Session statuses used in animations:
 
 Prefix: `session-service:charging:`
 
-| Redis Projection | Animation Meaning |
+| Redis Projection | Flow Meaning |
 | --- | --- |
 | Connector start lock | Prevents two start requests racing for the same charger/connector. |
 | Transaction index | Maps charger/OCPP transaction id to session id. |
@@ -139,6 +141,27 @@ Receipt terminal event cache:
 - TTL: 120 seconds
 - Purpose: replay receipt event if the app reconnects after stream interruption.
 
+### Elasticsearch Session Projections
+
+Session-service uses Elasticsearch as a read-optimized projection layer, separate from PostgreSQL. PostgreSQL remains the source of truth.
+
+| Index | Writer | When Updated | What It Supports |
+| --- | --- | --- | --- |
+| `session-current-sessions` | `CurrentSessionIndexService.upsert(...)` | During active lifecycle updates such as start, meter values, status changes, and idle transitions. | Fast active-session lookup and current session read models. |
+| `session-current-sessions` delete | `CurrentSessionIndexService.delete(sessionId)` | When the session is no longer active, stale, or has moved to completed receipt flow. | Prevents old active sessions from appearing after completion. |
+| `session-history` | `CurrentSessionIndexService.indexHistory(session)` | During receipt generation/final settlement inside `settleAndIndexCompletedSession(...)`. | Completed session history and downstream reporting/search. |
+| Driver stats index | `DriverDashboardStatsService.processCompletedSession(session)` | After a completed session has been settled and indexed. | Driver dashboard aggregates such as totals, trends, and last session data. |
+
+Receipt finalization order for projections:
+
+1. Session reaches `COMPLETED`.
+2. `generateReceipt(sessionId)` calls `finalizeCostIfPossible(session)`.
+3. `settleAndIndexCompletedSession(session)` records subscription utilization and payment settlement.
+4. `CurrentSessionIndexService.indexHistory(session)` writes the completed session into `session-history`.
+5. `CurrentSessionIndexService.delete(session.getId())` removes the active projection from `session-current-sessions`.
+6. `DriverDashboardStatsService.processCompletedSession(session)` updates driver-level summary projections when a user account exists.
+7. Receipt response and receipt-ready stream event are sent to the app.
+
 ### Kafka
 
 Session service publishes receipt analytics when enabled:
@@ -148,7 +171,7 @@ Session service publishes receipt analytics when enabled:
 - Event: `ReceiptGeneratedAnalyticsEvent`
 - Includes session id, receipt id/version, energy, costs, tax amount, idle fee, payment method, subscription fields, timestamps.
 
-Use dashed async arrows for Kafka in animations because it is not on the critical response path.
+Use dashed async arrows for Kafka in diagrams because it is not on the critical response path.
 
 ## End-To-End Flow 1: Mobile Charger Detail And Price Plan
 
@@ -169,7 +192,7 @@ sequenceDiagram
     GW-->>App: Detail response
 ```
 
-Response fields to show in animation:
+Response fields to include:
 
 - `chargerId`, `chargerName`, `status`
 - `availablePorts`, `busyPorts`
@@ -231,7 +254,7 @@ sequenceDiagram
 
 Start-flow responsibilities:
 
-| Step | Owning Service | Notes For Animation |
+| Step | Owning Service | Flow Notes |
 | --- | --- | --- |
 | Authentication/RBAC | API Gateway | Validates JWT/cookies, forwards account context. |
 | Connector race guard | Session Service + Redis | Start lock prevents duplicate concurrent starts. |
@@ -242,7 +265,7 @@ Start-flow responsibilities:
 | Remote start | Session -> OCPP | `POST /api/v1/ocpp/commands/{chargePointId}/remote-start`. |
 | Charger command | OCPP -> charger WS | OCPP service sends OCPP JSON-RPC over active WebSocket. |
 
-Animation state labels:
+State labels:
 
 1. `Requested`
 2. `Connector locked`
@@ -316,7 +339,7 @@ Card-present behavior:
   - `paymentAuthorizationId`
   - `paymentProviderReference`
   - `paymentToken`
-- Card-present sessions may not have a registered user account. Do not animate subscription discount for anonymous card-present sessions unless a user allocation exists.
+- Card-present sessions may not have a registered user account. Do not show subscription discount for anonymous card-present sessions unless a user allocation exists.
 
 RFID/PnC behavior:
 
@@ -368,7 +391,7 @@ Cost calculation details:
 | Subscription preview | Subscription Service | user id/allocation context, charging cost, session fee, idle fee, taxes, energy, quota units | Discount amounts, final charge, quota consumed, plan metadata. |
 | Low balance check | Payment Service | account id, session id, projected charge, threshold, currency | `sufficientBalance`, `autoTopUpApplied`, wallet before/after. |
 
-Animation notes:
+Flow notes:
 
 - MeterValue persistence is durable and high frequency. Draw it as repeated pulses into `MeterValue` table.
 - Active-session updates are optimized through Redis so the mobile app does not need to hit PostgreSQL on every tick.
@@ -404,7 +427,7 @@ Idle session fields:
 - `remoteStopRequestedAt`
 - `simulatorSecurityCode`
 
-Animation states:
+Flow states:
 
 ```mermaid
 stateDiagram-v2
@@ -484,7 +507,7 @@ Active session response should include:
   - `connectorId`
   - `sessionId`
 
-Animation note:
+Flow note:
 
 - For mobile UX, show active screen first loading from REST, then live changes arriving through SSE.
 
@@ -495,7 +518,7 @@ API:
 - `POST /session/api/v1/sessions/{sessionId}/stop`
 - Body example: `{"reason":"Remote","userInitiated":true}`
 
-Correct animation for idle-fee configured connector:
+Correct flow for idle-fee configured connector:
 
 ```mermaid
 sequenceDiagram
@@ -523,7 +546,7 @@ sequenceDiagram
     Session->>SSE: keep SUSPENDED idle screen
 ```
 
-Correct animation for connector without idle fee:
+Correct flow for connector without idle fee:
 
 ```mermaid
 sequenceDiagram
@@ -542,7 +565,7 @@ sequenceDiagram
     Session->>SSE: RECEIPT_PREPARING then RECEIPT_READY
 ```
 
-Do not animate receipt immediately after remote stop for idle-fee sessions. Receipt appears only after unplug completes the session.
+Do not show receipt immediately after remote stop for idle-fee sessions. Receipt appears only after unplug completes the session.
 
 ## End-To-End Flow 8: Simulator Unplug With Security Code
 
@@ -566,7 +589,7 @@ APIs and events:
 - Simulator emits OCPP status/meter/stop actions to backend via its configured connector path.
 - Session-service validates that code belongs to the session and connector.
 
-Animation sequence:
+Flow sequence:
 
 ```mermaid
 sequenceDiagram
@@ -618,6 +641,7 @@ sequenceDiagram
         Payment-->>Session: settlement id/status
     end
     Session->>DB: Save final cost/payment/subscription fields
+    Session->>ES: Index session-history and delete current-session document
     Session->>Kafka: eh.charging.receipt.generated.v1
     Session->>SSE: RECEIPT_READY
     App->>Session: GET /sessions/{id}/receipt
@@ -627,6 +651,13 @@ Receipt API:
 
 - Driver: `GET /session/api/v1/sessions/{id}/receipt`
 - Admin: `GET /session/api/v1/sessions/admin/{id}/receipt`
+
+Receipt and Elasticsearch detail:
+
+- The receipt itself is generated from the canonical `ChargingSession` record in PostgreSQL.
+- During the same finalization path, session-service writes a completed-session projection to Elasticsearch index `session-history`.
+- The active Elasticsearch document in `session-current-sessions` is deleted so active screens and admin active-session lists do not continue showing the completed session.
+- Driver dashboard aggregate projection is updated after completed-session indexing, when `userAccountId` is present.
 
 Receipt fields to show:
 
@@ -673,7 +704,7 @@ Search filters:
 - auth method
 - search text/session id/transaction id
 
-Admin list animation:
+Admin list flow:
 
 ```mermaid
 sequenceDiagram
@@ -730,7 +761,7 @@ Sync jobs:
   - `POST /api/v1/ocpi/sync/queue/{itemId}/retry`
   - `DELETE /api/v1/ocpi/sync/queue/completed`
 
-Animation:
+Flow:
 
 ```mermaid
 sequenceDiagram
@@ -781,7 +812,7 @@ Pricing caps:
 - Plan-level max total cost.
 - Idle fee max amount via parking component max price/policy.
 
-Animation note:
+Flow note:
 
 - Show pricing plan as an input to both driver price display and session cost calculation.
 - Show parking component becoming idle fee policy.
@@ -820,7 +851,7 @@ Payment data stores:
 - `payment.payment_session_authorization`
 - `payment.payment_session_transaction`
 
-Auto top-up animation:
+Auto top-up walkthroughs:
 
 ```mermaid
 sequenceDiagram
@@ -872,7 +903,7 @@ Discount fields:
 - final charge including/excluding tax
 - quota exhausted
 
-Animation:
+Flow:
 
 - Use `preview` during active session updates.
 - Use `record` once, during receipt/finalization.
@@ -890,7 +921,7 @@ Likely public flow:
 4. Admin portal notification tab fetches inbox.
 5. Opening a notification marks it as read.
 
-Animation requirements:
+Flow requirements:
 
 - Rate limit: 1 request/second for the project brief API at gateway/common API layer.
 - Admin inbox resembles mail:
@@ -898,7 +929,7 @@ Animation requirements:
   - open message marks read
   - filter/search by status/type if available
 
-## Animation Scene Library
+## Flow Section Library
 
 Use these scenes as reusable clips:
 
@@ -959,7 +990,7 @@ flowchart LR
 
 ### Driver Session
 
-| Method | Path | Owner | Animation Use |
+| Method | Path | Owner | Flow Use |
 | --- | --- | --- | --- |
 | `POST` | `/session/api/v1/sessions/start` | Session | Driver starts charging. |
 | `POST` | `/session/api/v1/sessions/{id}/stop` | Session | Driver remote stop. |
@@ -972,7 +1003,7 @@ flowchart LR
 
 ### OCPP Callbacks
 
-| Method | Path | Owner | Animation Use |
+| Method | Path | Owner | Flow Use |
 | --- | --- | --- | --- |
 | `POST` | `/session/api/v1/sessions/authorize` | Session | OCPP authorize callback. |
 | `POST` | `/session/api/v1/sessions/ocpp/start-transaction` | Session | Charger starts transaction. |
@@ -982,7 +1013,7 @@ flowchart LR
 
 ### OCPP Remote Commands
 
-| Method | Path | Owner | Animation Use |
+| Method | Path | Owner | Flow Use |
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/ocpp/commands/{chargePointId}/remote-start` | OCPP | Send RemoteStartTransaction. |
 | `POST` | `/api/v1/ocpp/commands/{chargePointId}/remote-stop` | OCPP | Send RemoteStopTransaction. |
@@ -997,7 +1028,7 @@ Note: session-service calls OCPP service internally with `/api/v1/ocpp/commands/
 
 ### Admin Session
 
-| Method | Path | Owner | Animation Use |
+| Method | Path | Owner | Flow Use |
 | --- | --- | --- | --- |
 | `GET` | `/session/api/v1/sessions/admin/search` | Session | Admin active/completed session list. |
 | `POST` | `/session/api/v1/sessions/admin/{id}/stop` | Session | Admin stop active session. |
@@ -1036,7 +1067,7 @@ Note: session-service calls OCPP service internally with `/api/v1/ocpp/commands/
 | `GET` | `/subscription/api/v1/subscriptions/allocations` | Subscription |
 | `POST` | `/subscription/api/v1/admin/subscriptions/grants` | Subscription |
 
-## Critical Correctness Rules For Animations
+## Critical Correctness Rules
 
 1. Do not show session receipt generation before physical unplug when idle fee is enabled and remote stop was requested.
 2. Do not show raw provider transaction ids to admins or drivers; show ElectraHub transaction id if ElectraHub authorized payment.
@@ -1049,7 +1080,7 @@ Note: session-service calls OCPP service internally with `/api/v1/ocpp/commands/
 9. Show auto top-up inside balance check, not as a separate mobile-triggered action during charging.
 10. Show admin portal reads through API gateway and session-service; admin does not read DB directly.
 
-## Known Implementation Gaps To Mark As Caution In Animations
+## Known Implementation Gaps To Mark As Caution
 
 Use small "implementation detail" callouts for these:
 
@@ -1059,9 +1090,9 @@ Use small "implementation detail" callouts for these:
 - OCPI/simulator names are historically inconsistent: the active simulator repo is `ocpi-simulator`, and its UI lives under `ocpi-simulator/ui`.
 - Some API paths differ when called through gateway versus service-to-service. Public paths include the service prefix, internal RestClient paths usually do not.
 
-## Suggested Animation Deliverables
+## Suggested Flow Sections
 
-Create one animation per flow:
+Create one chapter per flow:
 
 1. "Driver Opens Charger Detail and Price Plan"
 2. "Remote Start to OCPP StartTransaction"
@@ -1076,7 +1107,7 @@ Create one animation per flow:
 11. "OCPI Location/Tariff/Session/CDR Sync"
 12. "Pricing Plan and Idle Fee Configuration"
 
-Each animation should include:
+Each chapter should include:
 
 - Service swimlane
 - API call labels
@@ -1085,3 +1116,4 @@ Each animation should include:
 - Success path
 - Failure branch
 - User-visible UI outcome
+

@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ElectraHub Charging Flow Animation</title>
+  <title>ElectraHub Session Flow Walkthrough</title>
   <style>
     :root {
       --bg: #f4f7fb;
@@ -212,7 +212,7 @@
     .dot.pricing { background: var(--pricing); }
     .dot.async { background: var(--async); }
 
-    .animation-stage {
+    .walkthroughs-stage {
       position: relative;
       min-height: 520px;
       overflow: hidden;
@@ -292,7 +292,7 @@
 
     .link-line.active {
       opacity: 1;
-      animation: drawLine .7s ease forwards;
+      walkthroughs: drawLine .7s ease forwards;
     }
 
     .link-line.async {
@@ -447,7 +447,7 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .details-grid { grid-template-columns: 1fr; }
-      .animation-stage { min-height: 760px; }
+      .walkthroughs-stage { min-height: 760px; }
       .service-node {
         position: static;
         width: auto;
@@ -469,15 +469,15 @@
       .controls { justify-content: stretch; }
       .btn { flex: 1 1 120px; }
       .stage-nodes { grid-template-columns: 1fr; }
-      .animation-stage { min-height: 980px; }
+      .walkthroughs-stage { min-height: 980px; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>ElectraHub Charging Flow Animation</h1>
+    <h1>ElectraHub Session Flow Walkthrough</h1>
     <p>
-      Animated, service-by-service walkthrough for charger detail, start, OCPP authorization, meter values,
+      Service-by-service walkthrough for charger detail, start, OCPP authorization, meter values,
       pricing, idle fee, subscriptions, payment, simulator unplug, receipts, admin sessions, OCPI, and notifications.
     </p>
   </header>
@@ -512,7 +512,7 @@
           </div>
         </div>
 
-        <div class="animation-stage" id="stage">
+        <div class="walkthroughs-stage" id="stage">
           <svg class="links" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
             <path id="link-app-gateway" class="link-line" d="M160,70 C210,70 220,70 270,70" />
             <path id="link-gateway-session" class="link-line" d="M390,70 C440,90 455,120 500,150" />
@@ -550,7 +550,7 @@
       </div>
 
       <div class="panel">
-        <h2>Animation Notes</h2>
+        <h2>walkthroughs Notes</h2>
         <div class="details-grid" id="detailGrid"></div>
       </div>
     </section>
@@ -898,7 +898,7 @@
 
       const warn = document.createElement("div");
       warn.className = "warning";
-      warn.textContent = "Animation invariant: for idle-fee sessions, remote stop pauses charging and starts/continues idle. Receipt is shown only after confirmed unplug.";
+      warn.textContent = "walkthroughs invariant: for idle-fee sessions, remote stop pauses charging and starts/continues idle. Receipt is shown only after confirmed unplug.";
       detailGrid.appendChild(warn);
     }
 
@@ -977,3 +977,4 @@
   </script>
 </body>
 </html>
+
