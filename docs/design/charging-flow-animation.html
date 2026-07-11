@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ElectraHub Charging Flow Animation</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --ink: #142033;
+      --muted: #5c6b7d;
+      --line: #d7e0ec;
+      --card: #ffffff;
+      --gateway: #1f6feb;
+      --session: #0f9d8a;
+      --ocpp: #7c3aed;
+      --payment: #d97706;
+      --subscription: #be185d;
+      --pricing: #047857;
+      --store: #334155;
+      --async: #64748b;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --shadow: 0 18px 45px rgba(25, 38, 63, .12);
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      padding: 24px clamp(16px, 4vw, 48px);
+      background: #0d1728;
+      color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 44px);
+      letter-spacing: 0;
+    }
+
+    header p {
+      max-width: 1080px;
+      margin: 12px 0 0;
+      color: #c8d4e5;
+      line-height: 1.55;
+      font-size: 16px;
+    }
+
+    main {
+      padding: 20px clamp(14px, 3vw, 36px) 44px;
+      display: grid;
+      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 12px;
+      align-self: start;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .sidebar h2,
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: .08em;
+    }
+
+    .flow-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .flow-button {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 10px 11px;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+
+    .flow-button span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .flow-button.active {
+      background: #e8f1ff;
+      border-color: #8ab9ff;
+      color: #0b4faa;
+      font-weight: 700;
+    }
+
+    .flow-button:hover { transform: translateY(-1px); }
+
+    .workspace {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: clamp(14px, 2vw, 22px);
+    }
+
+    .stage-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .stage-head h2 {
+      font-size: clamp(22px, 3vw, 34px);
+      text-transform: none;
+      color: var(--ink);
+      letter-spacing: 0;
+      margin-bottom: 8px;
+    }
+
+    .stage-head p {
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0;
+      max-width: 900px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px 14px;
+      cursor: pointer;
+      font: inherit;
+      color: var(--ink);
+      min-height: 40px;
+    }
+
+    .btn.primary {
+      background: var(--gateway);
+      border-color: var(--gateway);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 9px;
+      background: #fbfdff;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      background: var(--store);
+    }
+
+    .dot.gateway { background: var(--gateway); }
+    .dot.session { background: var(--session); }
+    .dot.ocpp { background: var(--ocpp); }
+    .dot.payment { background: var(--payment); }
+    .dot.subscription { background: var(--subscription); }
+    .dot.pricing { background: var(--pricing); }
+    .dot.async { background: var(--async); }
+
+    .animation-stage {
+      position: relative;
+      min-height: 520px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(31,111,235,.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(31,111,235,.05) 1px, transparent 1px),
+        #fbfdff;
+      background-size: 32px 32px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      margin-top: 18px;
+    }
+
+    .service-node {
+      position: absolute;
+      width: 150px;
+      min-height: 74px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 22px rgba(20, 32, 51, .08);
+      transition: transform .35s ease, border-color .35s ease, background .35s ease, opacity .35s ease;
+      opacity: .72;
+    }
+
+    .service-node strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .service-node small {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .service-node.active {
+      opacity: 1;
+      transform: scale(1.04);
+      border-color: var(--gateway);
+      background: #f5f9ff;
+    }
+
+    .node-app { left: 4%; top: 32px; }
+    .node-gateway { left: 25%; top: 32px; }
+    .node-charger { left: 4%; top: 218px; }
+    .node-ocpp { left: 25%; top: 218px; }
+    .node-session { left: 46%; top: 122px; }
+    .node-pricing { left: 68%; top: 32px; }
+    .node-subscription { left: 68%; top: 140px; }
+    .node-payment { left: 68%; top: 248px; }
+    .node-redis { left: 46%; top: 334px; }
+    .node-db { left: 68%; top: 372px; }
+    .node-kafka { left: 84%; top: 248px; width: 120px; }
+    .node-ocpi { left: 84%; top: 32px; width: 120px; }
+
+    svg.links {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .link-line {
+      stroke: #a9b7c9;
+      stroke-width: 2;
+      fill: none;
+      stroke-dasharray: 420;
+      stroke-dashoffset: 420;
+      opacity: 0;
+    }
+
+    .link-line.active {
+      opacity: 1;
+      animation: drawLine .7s ease forwards;
+    }
+
+    .link-line.async {
+      stroke-dasharray: 8 7;
+      stroke: var(--async);
+    }
+
+    @keyframes drawLine {
+      to { stroke-dashoffset: 0; }
+    }
+
+    .packet {
+      position: absolute;
+      min-width: 148px;
+      max-width: 260px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid #b8c6d8;
+      background: #fff;
+      box-shadow: 0 10px 24px rgba(20, 32, 51, .18);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity .25s ease, transform .25s ease;
+      z-index: 5;
+    }
+
+    .packet.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .packet strong {
+      display: block;
+      font-size: 12px;
+      color: #0b4faa;
+      margin-bottom: 3px;
+    }
+
+    .packet small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.35;
+      font-size: 12px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      transition: background .2s ease, color .2s ease, border-color .2s ease;
+    }
+
+    .step.active {
+      color: var(--ink);
+      border-color: #94c3ff;
+      background: #f2f8ff;
+    }
+
+    .step .num {
+      display: grid;
+      place-items: center;
+      height: 28px;
+      width: 28px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--gateway);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .step strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .step span {
+      display: block;
+      line-height: 1.4;
+      font-size: 13px;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .detail-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .detail-card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .detail-card ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 13px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 6px 8px;
+      background: #fbfdff;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .warning {
+      margin-top: 12px;
+      border: 1px solid #f7c873;
+      background: #fff8e7;
+      color: #744b00;
+      border-radius: 8px;
+      padding: 10px 12px;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+      .flow-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .details-grid { grid-template-columns: 1fr; }
+      .animation-stage { min-height: 760px; }
+      .service-node {
+        position: static;
+        width: auto;
+        margin: 10px;
+      }
+      svg.links,
+      .packet { display: none; }
+      .stage-nodes {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      header { padding: 20px 14px; }
+      main { padding: 12px; }
+      .flow-list { grid-template-columns: 1fr; }
+      .stage-head { grid-template-columns: 1fr; }
+      .controls { justify-content: stretch; }
+      .btn { flex: 1 1 120px; }
+      .stage-nodes { grid-template-columns: 1fr; }
+      .animation-stage { min-height: 980px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ElectraHub Charging Flow Animation</h1>
+    <p>
+      Animated, service-by-service walkthrough for charger detail, start, OCPP authorization, meter values,
+      pricing, idle fee, subscriptions, payment, simulator unplug, receipts, admin sessions, OCPI, and notifications.
+    </p>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <h2>Flows</h2>
+      <div class="flow-list" id="flowList"></div>
+    </aside>
+
+    <section class="workspace">
+      <div class="panel">
+        <div class="stage-head">
+          <div>
+            <h2 id="flowTitle"></h2>
+            <p id="flowSummary"></p>
+            <div class="legend">
+              <span><i class="dot gateway"></i> Gateway/API</span>
+              <span><i class="dot session"></i> Session</span>
+              <span><i class="dot ocpp"></i> OCPP/charger</span>
+              <span><i class="dot pricing"></i> Pricing</span>
+              <span><i class="dot subscription"></i> Subscription</span>
+              <span><i class="dot payment"></i> Payment</span>
+              <span><i class="dot async"></i> Async/event</span>
+            </div>
+          </div>
+          <div class="controls">
+            <button class="btn" type="button" id="prevStep">Back</button>
+            <button class="btn primary" type="button" id="playPause">Play</button>
+            <button class="btn" type="button" id="nextStep">Next</button>
+            <button class="btn" type="button" id="resetFlow">Reset</button>
+          </div>
+        </div>
+
+        <div class="animation-stage" id="stage">
+          <svg class="links" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
+            <path id="link-app-gateway" class="link-line" d="M160,70 C210,70 220,70 270,70" />
+            <path id="link-gateway-session" class="link-line" d="M390,70 C440,90 455,120 500,150" />
+            <path id="link-session-pricing" class="link-line" d="M600,145 C650,90 665,72 720,70" />
+            <path id="link-session-subscription" class="link-line" d="M600,160 C650,160 670,175 720,178" />
+            <path id="link-session-payment" class="link-line" d="M600,180 C650,225 670,275 720,286" />
+            <path id="link-session-redis" class="link-line async" d="M550,206 C550,250 550,310 550,360" />
+            <path id="link-session-db" class="link-line" d="M620,210 C695,280 728,360 760,408" />
+            <path id="link-session-kafka" class="link-line async" d="M620,190 C740,210 815,265 870,286" />
+            <path id="link-charger-ocpp" class="link-line" d="M160,256 C215,256 230,256 275,256" />
+            <path id="link-ocpp-session" class="link-line" d="M395,256 C445,238 470,200 505,170" />
+            <path id="link-ocpi-session" class="link-line" d="M870,70 C750,80 665,120 600,150" />
+          </svg>
+          <div class="stage-nodes">
+            <div class="service-node node-app" data-node="app"><strong>Driver/Admin UI</strong><small>iOS, Android, portal, admin</small></div>
+            <div class="service-node node-gateway" data-node="gateway"><strong>API Gateway</strong><small>JWT, RBAC, route proxy</small></div>
+            <div class="service-node node-charger" data-node="charger"><strong>Charger / Simulator</strong><small>HMI, RFID, card, PnC, unplug</small></div>
+            <div class="service-node node-ocpp" data-node="ocpp"><strong>OCPP Service</strong><small>WebSocket CSMS and commands</small></div>
+            <div class="service-node node-session" data-node="session"><strong>Domain Service</strong><small>Session, charger, notification owner</small></div>
+            <div class="service-node node-pricing" data-node="pricing"><strong>Pricing Service</strong><small>Tariffs, cost, caps</small></div>
+            <div class="service-node node-subscription" data-node="subscription"><strong>Subscription Service</strong><small>Preview, record, quota</small></div>
+            <div class="service-node node-payment" data-node="payment"><strong>Payment Service</strong><small>Wallet, card, holds, settlement</small></div>
+            <div class="service-node node-redis" data-node="redis"><strong>Redis</strong><small>Locks, active projection, SSE pub/sub</small></div>
+            <div class="service-node node-db" data-node="db"><strong>PostgreSQL / ES</strong><small>Canonical state and search</small></div>
+            <div class="service-node node-kafka" data-node="kafka"><strong>Kafka</strong><small>Receipt analytics</small></div>
+            <div class="service-node node-ocpi" data-node="ocpi"><strong>OCPI Partner</strong><small>Locations, tariffs, CDRs</small></div>
+          </div>
+          <div class="packet" id="packet"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Timeline</h2>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Animation Notes</h2>
+        <div class="details-grid" id="detailGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const flows = [
+      {
+        id: "charger-detail",
+        title: "1. Charger Detail and Price Plan",
+        short: "GraphQL charger + OCPI tariff",
+        summary: "Driver opens a charger. Gateway routes charger detail to charger-management, which returns location, connector status, tariffs, and idle fee policy used by the price plan.",
+        notes: [
+          ["APIs", ["POST /charger/graphql", "ocpiCharger(chargerId)", "Returns tariff and idleFee snapshot"]],
+          ["Data", ["Charger/location/connector projection", "OCPI location id", "Connector tariff ids"]],
+          ["UI outcome", ["Available/busy ports", "Connector status", "Idle fee shown in price plan"]]
+        ],
+        steps: [
+          s("app", "gateway", "POST /charger/graphql", "Driver requests ocpiCharger details.", "link-app-gateway"),
+          s("gateway", "session", "Route /charger/**", "Gateway authenticates if needed and forwards to charger-management route.", "link-gateway-session"),
+          s("session", "db", "Read projections", "Charger/location/connector/tariff details are read from durable/search stores.", "link-session-db"),
+          s("session", "app", "Detail response", "Mobile receives status, tariffs, connector list, and idle fee policy.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "remote-start",
+        title: "2. Driver Remote Start",
+        short: "Start request to OCPP RemoteStart",
+        summary: "Driver starts charging from the app. Session-service locks the connector, checks payment eligibility, resolves idle policy, creates a pending session, and sends RemoteStartTransaction to the charger.",
+        notes: [
+          ["APIs", ["POST /session/api/v1/sessions/start", "POST /payment/internal/session-authorizations", "POST /ocpp/commands/{chargerId}/remote-start"]],
+          ["Stores", ["ChargingSession PENDING/PREPARING", "Redis connector start lock", "Active session projection"]],
+          ["Failure branches", ["Connector locked by another session", "Wallet/card unavailable", "OCPP charger not connected"]]
+        ],
+        steps: [
+          s("app", "gateway", "POST /session/start", "Driver submits charger, connector, payment method, idempotency key.", "link-app-gateway"),
+          s("gateway", "session", "Proxy to session-service", "Gateway validates driver context and forwards account headers.", "link-gateway-session"),
+          s("session", "redis", "Acquire connector lock", "Redis prevents two users starting the same connector concurrently.", "link-session-redis"),
+          s("session", "payment", "Authorize hold", "Payment checks wallet/cards and creates a session hold.", "link-session-payment"),
+          s("session", "pricing", "Resolve idle policy", "Pricing returns idle enabled, price/minute, grace, cap, currency.", "link-session-pricing"),
+          s("session", "db", "Create session", "ChargingSession is persisted as pending/preparing with payment and idle metadata.", "link-session-db"),
+          s("session", "ocpp", "RemoteStartTransaction", "Session-service calls OCPP service to command the charger.", "link-ocpp-session"),
+          s("ocpp", "charger", "OCPP WebSocket command", "OCPP service sends RemoteStartTransaction to the connected charger.", "link-charger-ocpp")
+        ]
+      },
+      {
+        id: "authorize-start",
+        title: "3. OCPP Authorize and StartTransaction",
+        short: "RFID, card, PnC authorization",
+        summary: "The charger sends Authorize and StartTransaction. Session-service validates RFID/card-present/PnC tokens, matches the pending session, and marks it active.",
+        notes: [
+          ["OCPP actions", ["BootNotification", "Authorize", "StartTransaction", "TransactionEvent for OCPP 2.0.1"]],
+          ["Token types", ["RFID idTag", "Card-present token", "PnC EMID/certificate flow"]],
+          ["State", ["PREPARING/PENDING -> ACTIVE", "OCPP transaction id stored", "Meter start stored"]]
+        ],
+        steps: [
+          s("charger", "ocpp", "BootNotification", "Charger connects and announces protocol/identity.", "link-charger-ocpp"),
+          s("charger", "ocpp", "Authorize(idTag)", "RFID, card-present, or PnC token arrives over WebSocket.", "link-charger-ocpp"),
+          s("ocpp", "session", "POST /sessions/authorize", "OCPP service asks session-service to validate the token.", "link-ocpp-session"),
+          s("session", "payment", "Verify card-present", "Card-present tokens are verified by payment-service.", "link-session-payment"),
+          s("charger", "ocpp", "StartTransaction", "Charger sends transaction id, connector id, meter start.", "link-charger-ocpp"),
+          s("ocpp", "session", "POST /ocpp/start-transaction", "Session-service matches pending session or creates RFID/card-present session.", "link-ocpp-session"),
+          s("session", "db", "Persist ACTIVE", "Session stores transaction id, auth method, meter start, and active status.", "link-session-db"),
+          s("session", "redis", "SSE active update", "Redis projection and pub/sub update mobile active charging screen.", "link-session-redis")
+        ]
+      },
+      {
+        id: "meter-values",
+        title: "4. MeterValues and Realtime Cost",
+        short: "Energy pulses, cost, low balance",
+        summary: "MeterValues update energy, power, realtime cost, subscription preview, low-balance checks, Redis projections, and SSE events.",
+        notes: [
+          ["APIs", ["POST /session/ocpp/meter-values/{transactionId}", "POST /pricing/calculate/session-cost", "POST /subscriptions/utilizations/preview", "POST /payment/internal/session-balance-checks"]],
+          ["High frequency", ["Persist MeterValue", "Update latest meter Redis snapshot", "Publish SESSION_UPDATED"]],
+          ["Stops", ["Low power may enter idle", "Low balance can trigger remote stop"]]
+        ],
+        steps: [
+          s("charger", "ocpp", "MeterValues", "Charger sends Wh, W, timestamp for active transaction.", "link-charger-ocpp"),
+          s("ocpp", "session", "POST meter-values", "OCPP service forwards normalized payload to session-service.", "link-ocpp-session"),
+          s("session", "db", "Insert MeterValue", "Meter sample is stored and session energy/power are updated.", "link-session-db"),
+          s("session", "pricing", "Calculate running cost", "Pricing returns energy/time/parking/flat breakdown and caps.", "link-session-pricing"),
+          s("session", "subscription", "Preview discount", "Subscription previews discount and quota without committing it.", "link-session-subscription"),
+          s("session", "payment", "Balance check", "Payment may auto top-up or report insufficient balance.", "link-session-payment"),
+          s("session", "redis", "Publish active projection", "Mobile receives updated cost, kWh, power, idle fields.", "link-session-redis")
+        ]
+      },
+      {
+        id: "idle-fee",
+        title: "5. Idle Fee Detection",
+        short: "SUSPENDED, ticker, cap",
+        summary: "Idle fee starts when power drops near zero or remote stop pauses charging while the cable remains plugged. Session-service maintains idle seconds and applies idle fee caps.",
+        notes: [
+          ["Idle fields", ["idleFeeEnabled", "idleFeePerMinute", "idleStartedAt", "idleSecondsAccumulated", "idleFeeMaxAmount"]],
+          ["Redis", ["Idle due sorted set", "Remote stop idle marker", "Connector status projection"]],
+          ["Correctness", ["Remote stop is not receipt", "Unplug is the terminal action"]]
+        ],
+        steps: [
+          s("charger", "ocpp", "Low power MeterValues", "Power below threshold indicates charging has paused.", "link-charger-ocpp"),
+          s("ocpp", "session", "Meter callback", "Session-service evaluates idle policy and status.", "link-ocpp-session"),
+          s("session", "pricing", "Idle policy", "Parking component defines idle fee rate, grace, and max cap.", "link-session-pricing"),
+          s("session", "db", "Set SUSPENDED", "Session enters idle with idleStartedAt and currentPower=0.", "link-session-db"),
+          s("session", "redis", "Register idle ticker", "Redis schedules periodic idle fee updates.", "link-session-redis"),
+          s("session", "app", "SSE idle update", "App shows idle screen and simulator unplug link.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "active-sse",
+        title: "6. Active Session Pull and SSE",
+        short: "REST snapshot + live stream",
+        summary: "Mobile loads active sessions through REST, then keeps the active charging screen current through SSE events backed by Redis pub/sub.",
+        notes: [
+          ["APIs", ["GET /session/api/v1/sessions/active", "GET /session/api/v1/sessions/{id}/current", "GET /session/api/v1/sessions/active/stream"]],
+          ["Events", ["CONNECTED", "SNAPSHOT", "SESSION_UPDATED", "SESSION_TERMINAL", "RECEIPT_READY"]],
+          ["Projection", ["Redis is fast path", "PostgreSQL is fallback and source of truth"]]
+        ],
+        steps: [
+          s("app", "gateway", "GET /sessions/active", "App requests current active sessions.", "link-app-gateway"),
+          s("gateway", "session", "Proxy active request", "Gateway streams or forwards based on content type.", "link-gateway-session"),
+          s("session", "redis", "Read active projection", "Session-service loads cached ActiveSessionResponse by account.", "link-session-redis"),
+          s("session", "db", "Fallback query", "If Redis is stale, DB active statuses rebuild projection.", "link-session-db"),
+          s("app", "gateway", "Open SSE stream", "App opens /active/stream.", "link-app-gateway"),
+          s("session", "app", "SSE events", "Connected, snapshot, session, terminal, and receipt events drive UI.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "remote-stop-idle",
+        title: "7. Remote Stop With Idle Fee",
+        short: "Stop charging, keep idle until unplug",
+        summary: "For idle-fee connectors, remote stop pauses the transaction but does not generate receipt until the cable is unplugged. Immediate Available after remote stop is guarded.",
+        notes: [
+          ["APIs", ["POST /session/api/v1/sessions/{id}/stop", "POST /ocpp/commands/{chargerId}/remote-stop", "POST /session/ocpp/stop-transaction/{transactionId}"]],
+          ["Guard", ["remoteStopRequestedAt", "remote stop idle marker", "Immediate Available ignored during guard window"]],
+          ["UI outcome", ["Active screen becomes idle", "No receipt yet", "Simulator link/iframe lets user unplug"]]
+        ],
+        steps: [
+          s("app", "gateway", "POST /sessions/{id}/stop", "Driver requests remote stop.", "link-app-gateway"),
+          s("gateway", "session", "Stop request", "Session-service records remoteStopRequestedAt.", "link-gateway-session"),
+          s("session", "ocpp", "RemoteStopTransaction", "OCPP service is asked to stop the charger transaction.", "link-ocpp-session"),
+          s("ocpp", "charger", "OCPP remote stop", "Charger accepts and stops energy flow.", "link-charger-ocpp"),
+          s("charger", "ocpp", "StopTransaction", "Charger sends StopTransaction after remote stop.", "link-charger-ocpp"),
+          s("ocpp", "session", "Stop callback", "Session-service moves idle-fee session to SUSPENDED.", "link-ocpp-session"),
+          s("session", "redis", "Protect idle marker", "Immediate Available is not treated as unplug.", "link-session-redis"),
+          s("session", "app", "Idle SSE update", "App stays on idle screen until physical/simulator unplug.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "sim-unplug",
+        title: "8. Simulator Security Code and Unplug",
+        short: "Iframe/link to HMI",
+        summary: "Mobile opens the simulator HMI with session, charger, connector, and securityCode in the URL. The HMI verifies silently and emits unplug behavior.",
+        notes: [
+          ["URL", ["#charger/{chargerId}/connector/{connectorId}?sessionId={id}&securityCode={code}", "Security code is not visibly displayed in app"]],
+          ["Verify", ["POST /sessions/{id}/simulator/verify-code", "Code must match session and connector"]],
+          ["Completion", ["Unplug emits Available/final signal", "Session completes", "Receipt starts"]]
+        ],
+        steps: [
+          s("app", "charger", "Open simulator HMI", "App opens iframe/link with charger, connector, session, hidden security code.", "link-charger-ocpp"),
+          s("charger", "session", "Verify code", "Simulator verifies code against the exact session and connector.", "link-ocpp-session"),
+          s("charger", "ocpp", "Unplug EV", "HMI emits physical unplug behavior.", "link-charger-ocpp"),
+          s("ocpp", "session", "Status/stop callback", "Session-service confirms unplug and closes idle.", "link-ocpp-session"),
+          s("session", "db", "Complete session", "Final duration, energy, idle fee, and stop reason are persisted.", "link-session-db"),
+          s("session", "app", "Terminal SSE", "Driver app can navigate to receipt after receipt-ready.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "receipt",
+        title: "9. Receipt, Settlement, Kafka",
+        short: "Final cost and payable amount",
+        summary: "After terminal completion, session-service finalizes pricing, applies taxes and subscription record, settles payment, emits Kafka analytics, and publishes receipt-ready.",
+        notes: [
+          ["APIs", ["POST /pricing/calculate/session-cost", "POST /subscriptions/utilizations", "POST /payment/internal/session-settlements", "GET /sessions/{id}/receipt"]],
+          ["Receipt display", ["Base charging cost", "Idle fee", "Taxes", "Subscription discount", "Total paid", "Masked payment method"]],
+          ["Async", ["Kafka topic eh.charging.receipt.generated.v1"]]
+        ],
+        steps: [
+          s("session", "pricing", "Final pricing", "Pricing returns final cost breakdown and caps.", "link-session-pricing"),
+          s("session", "session", "Apply taxes", "Session-service calculates tax and payable total.", "link-gateway-session"),
+          s("session", "subscription", "Record utilization", "Subscription records discount/quota consumption once.", "link-session-subscription"),
+          s("session", "payment", "Settle payment", "Wallet/card or card-present settlement completes payment.", "link-session-payment"),
+          s("session", "db", "Persist receipt fields", "Final cost, payment, subscription, and receipt fields are stored.", "link-session-db"),
+          s("session", "kafka", "Receipt analytics", "Receipt generated event is published if analytics Kafka is enabled.", "link-session-kafka"),
+          s("session", "app", "RECEIPT_READY", "App fetches and displays receipt.", "link-gateway-session")
+        ]
+      },
+      {
+        id: "admin",
+        title: "10. Admin Session Search and Actions",
+        short: "Active/completed lists",
+        summary: "Admin portal searches sessions, filters active/completed records, views receipts, and can stop active sessions through session-service.",
+        notes: [
+          ["APIs", ["GET /session/api/v1/sessions/admin/search", "POST /session/api/v1/sessions/admin/{id}/stop", "GET /session/api/v1/sessions/admin/{id}/receipt"]],
+          ["Filters", ["Location", "Charger", "Connector", "Driver type", "Payment mode", "Auth method"]],
+          ["Mobile admin", ["Cards instead of wide tables", "Receipt action for completed", "Stop action for active"]]
+        ],
+        steps: [
+          s("app", "gateway", "Admin search", "Admin opens active or completed sessions tab with filters.", "link-app-gateway"),
+          s("gateway", "session", "RBAC admin route", "Gateway enforces admin/read-only role policy.", "link-gateway-session"),
+          s("session", "db", "Query sessions", "Session-service searches ChargingSession with filters and pagination.", "link-session-db"),
+          s("session", "app", "Paged list", "Admin sees active/completed cards or table.", "link-gateway-session"),
+          s("app", "gateway", "Stop or receipt", "Active sessions expose stop; completed sessions expose receipt.", "link-app-gateway"),
+          s("session", "ocpp", "Admin stop path", "Admin stop reuses remote stop and idle rules.", "link-ocpp-session")
+        ]
+      },
+      {
+        id: "ocpi",
+        title: "11. OCPI Sync and Partner Exchange",
+        short: "Locations, tariffs, sessions, CDRs",
+        summary: "OCPI service synchronizes locations, sessions, CDRs, tariffs, and exposes OCPI 2.2.1 partner endpoints.",
+        notes: [
+          ["Endpoints", ["/ocpi/versions", "/ocpi/2.2.1/cpo/locations", "/ocpi/2.2.1/cpo/tariffs", "/ocpi/2.2.1/cpo/sessions", "/ocpi/2.2.1/cpo/cdrs"]],
+          ["Commands", ["START_SESSION", "STOP_SESSION", "UNLOCK_CONNECTOR"]],
+          ["Sync", ["Admin/scheduled locations", "Sessions", "CDRs", "Sync queue retry"]]
+        ],
+        steps: [
+          s("ocpi", "session", "Sync sessions", "OCPI service pulls active/completed session data as configured.", "link-ocpi-session"),
+          s("ocpi", "db", "Store OCPI records", "OCPI locations, sessions, CDRs, tariffs are persisted.", "link-session-db"),
+          s("ocpi", "app", "Partner GET locations", "Partner reads OCPI CPO endpoints.", "link-app-gateway"),
+          s("ocpi", "session", "OCPI START/STOP", "Partner command maps to internal start/stop behavior.", "link-ocpi-session"),
+          s("session", "ocpp", "Command charger", "Session/OCPP path controls charger as needed.", "link-ocpp-session")
+        ]
+      },
+      {
+        id: "pricing-payment-subscription",
+        title: "12. Pricing, Payment, Subscription Admin",
+        short: "Configuration and money flow",
+        summary: "Admins configure pricing plans, idle caps, subscriptions, wallet behavior, and payment methods; runtime charging uses those settings.",
+        notes: [
+          ["Pricing", ["ENERGY", "TIME", "PARKING as idle fee", "FLAT", "Plan max total cap"]],
+          ["Payment", ["Wallet", "Cards", "Auto top-up", "Session holds", "Settlements"]],
+          ["Subscription", ["Plan", "Allocation", "Preview", "Record", "Quota"]]
+        ],
+        steps: [
+          s("app", "gateway", "Admin config", "Admin creates pricing/subscription/payment configuration.", "link-app-gateway"),
+          s("gateway", "pricing", "Pricing plans", "Pricing stores energy/time/parking/flat components and caps.", "link-session-pricing"),
+          s("gateway", "subscription", "Subscription plans", "Subscription stores allocations, benefit rules, and quota.", "link-session-subscription"),
+          s("gateway", "payment", "Payment setup", "Payment stores wallet, cards, and auto top-up configuration.", "link-session-payment"),
+          s("session", "pricing", "Runtime lookup", "Charging sessions consume pricing policy during start/meter/receipt.", "link-session-pricing"),
+          s("session", "subscription", "Runtime discount", "Charging sessions preview then record subscription utilization.", "link-session-subscription"),
+          s("session", "payment", "Runtime money", "Charging sessions hold, top up, and settle payment.", "link-session-payment")
+        ]
+      },
+      {
+        id: "notifications",
+        title: "13. Project Brief and Notifications",
+        short: "Inbox, read state, rate limit",
+        summary: "Public project brief requests are rate-limited, stored as notifications, and shown in admin portal as a mail-style inbox that marks messages read when opened.",
+        notes: [
+          ["Ingress", ["electrahub.com project brief form", "Gateway/common 1 request/sec rate limit", "notification-service"]],
+          ["Admin UI", ["Notification tab", "Unread/read inbox", "Open marks read"]],
+          ["Validation", ["API should return created notification", "Admin should load and open notification"]]
+        ],
+        steps: [
+          s("app", "gateway", "Submit project brief", "Public form sends a project brief/general query.", "link-app-gateway"),
+          s("gateway", "gateway", "Rate limit", "Gateway/common filter allows one request per second.", "link-app-gateway"),
+          s("gateway", "session", "Route notifications", "Notification route stores the request.", "link-gateway-session"),
+          s("session", "db", "Persist notification", "Notification-service stores inbox item.", "link-session-db"),
+          s("app", "gateway", "Admin notification tab", "Admin loads mail-style notification inbox.", "link-app-gateway"),
+          s("session", "app", "Open marks read", "Opening notification updates read state and renders details.", "link-gateway-session")
+        ]
+      }
+    ];
+
+    function s(from, to, label, text, link) {
+      return { from, to, label, text, link };
+    }
+
+    const positions = {
+      app: [85, 90],
+      gateway: [305, 90],
+      charger: [85, 282],
+      ocpp: [305, 282],
+      session: [515, 180],
+      pricing: [745, 90],
+      subscription: [745, 198],
+      payment: [745, 306],
+      redis: [515, 382],
+      db: [745, 430],
+      kafka: [880, 306],
+      ocpi: [880, 90]
+    };
+
+    let currentFlow = 0;
+    let currentStep = 0;
+    let playing = false;
+    let timer = null;
+
+    const flowList = document.getElementById("flowList");
+    const title = document.getElementById("flowTitle");
+    const summary = document.getElementById("flowSummary");
+    const timeline = document.getElementById("timeline");
+    const detailGrid = document.getElementById("detailGrid");
+    const packet = document.getElementById("packet");
+
+    function renderFlowList() {
+      flowList.innerHTML = "";
+      flows.forEach((flow, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "flow-button" + (index === currentFlow ? " active" : "");
+        button.innerHTML = `${flow.title}<span>${flow.short}</span>`;
+        button.addEventListener("click", () => selectFlow(index));
+        flowList.appendChild(button);
+      });
+    }
+
+    function selectFlow(index) {
+      currentFlow = index;
+      currentStep = 0;
+      stop();
+      render();
+    }
+
+    function render() {
+      const flow = flows[currentFlow];
+      title.textContent = flow.title;
+      summary.textContent = flow.summary;
+      renderFlowList();
+      renderTimeline(flow);
+      renderDetails(flow);
+      showStep();
+    }
+
+    function renderTimeline(flow) {
+      timeline.innerHTML = "";
+      flow.steps.forEach((step, index) => {
+        const item = document.createElement("div");
+        item.className = "step" + (index === currentStep ? " active" : "");
+        item.innerHTML = `<div class="num">${index + 1}</div><div><strong>${step.label}</strong><span>${step.text}</span></div>`;
+        item.addEventListener("click", () => {
+          currentStep = index;
+          showStep();
+        });
+        timeline.appendChild(item);
+      });
+    }
+
+    function renderDetails(flow) {
+      detailGrid.innerHTML = "";
+      flow.notes.forEach(([heading, items]) => {
+        const card = document.createElement("div");
+        card.className = "detail-card";
+        card.innerHTML = `<h3>${heading}</h3><ul>${items.map(item => `<li>${item}</li>`).join("")}</ul>`;
+        detailGrid.appendChild(card);
+      });
+
+      const warn = document.createElement("div");
+      warn.className = "warning";
+      warn.textContent = "Animation invariant: for idle-fee sessions, remote stop pauses charging and starts/continues idle. Receipt is shown only after confirmed unplug.";
+      detailGrid.appendChild(warn);
+    }
+
+    function showStep() {
+      const flow = flows[currentFlow];
+      const step = flow.steps[currentStep];
+      document.querySelectorAll(".step").forEach((el, idx) => el.classList.toggle("active", idx === currentStep));
+      document.querySelectorAll(".service-node").forEach(node => {
+        const id = node.dataset.node;
+        node.classList.toggle("active", id === step.from || id === step.to);
+      });
+      document.querySelectorAll(".link-line").forEach(line => line.classList.remove("active"));
+      if (step.link) {
+        const line = document.getElementById(step.link);
+        if (line) {
+          void line.getBoundingClientRect();
+          line.classList.add("active");
+        }
+      }
+      movePacket(step);
+    }
+
+    function movePacket(step) {
+      const from = positions[step.from] || [500, 260];
+      const to = positions[step.to] || [500, 260];
+      const x = (from[0] + to[0]) / 2;
+      const y = (from[1] + to[1]) / 2;
+      packet.style.left = `calc(${x / 10}% - 80px)`;
+      packet.style.top = `${Math.max(16, y - 32)}px`;
+      packet.innerHTML = `<strong>${step.label}</strong><small>${step.text}</small>`;
+      packet.classList.remove("active");
+      void packet.getBoundingClientRect();
+      packet.classList.add("active");
+    }
+
+    function next() {
+      const flow = flows[currentFlow];
+      if (currentStep < flow.steps.length - 1) {
+        currentStep += 1;
+      } else {
+        currentStep = 0;
+      }
+      showStep();
+    }
+
+    function prev() {
+      const flow = flows[currentFlow];
+      currentStep = currentStep > 0 ? currentStep - 1 : flow.steps.length - 1;
+      showStep();
+    }
+
+    function play() {
+      playing = true;
+      document.getElementById("playPause").textContent = "Pause";
+      timer = window.setInterval(next, 1900);
+    }
+
+    function stop() {
+      playing = false;
+      document.getElementById("playPause").textContent = "Play";
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    document.getElementById("nextStep").addEventListener("click", next);
+    document.getElementById("prevStep").addEventListener("click", prev);
+    document.getElementById("resetFlow").addEventListener("click", () => {
+      currentStep = 0;
+      showStep();
+    });
+    document.getElementById("playPause").addEventListener("click", () => playing ? stop() : play());
+
+    render();
+  </script>
+</body>
+</html>

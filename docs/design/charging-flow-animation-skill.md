@@ -4,6 +4,8 @@ Purpose: give an animation or visualization agent enough precise service, API, e
 
 Last mapped: 2026-07-10.
 
+Companion animation: open `docs/design/charging-flow-animation.html` in a browser for an interactive walkthrough of these flows.
+
 ## How To Use This Skill
 
 Use this file as the canonical animation brief for ElectraHub charging/session/payment flows. For every animation:
