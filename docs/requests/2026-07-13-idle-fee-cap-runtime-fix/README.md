@@ -74,3 +74,14 @@ Elapsed idle time continues to increase after the monetary cap is reached. The i
   - `idleSeconds` may continue increasing;
   - overall estimated cost remains at or below `100.00`.
 
+## Production Result
+
+- Session service commit: `4801412`
+- TeamCity build: `ElectraHub_SessionService_Build` number `71` (`SUCCESS`)
+- Production image: `amolsurjuse/session-service:71`
+- Argo application: `session-service-prod` (`Synced`, `Healthy`)
+- Database after recovery: `idle_fee_max_amount = 50.0000`, `session_max_amount = 100.0000`
+- First active projection: `idleSeconds = 7566`, `idleFeeAmount = 50.0`
+- Next minute projection: `idleSeconds = 7694`, `idleFeeAmount = 50.0`
+
+The elapsed idle duration continued to advance while the monetary idle fee remained fixed at its configured maximum.
