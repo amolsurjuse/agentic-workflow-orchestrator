@@ -41,6 +41,7 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - The HMI treated `idleFeeEnabled` as if idle charging had already begun, so an idle-capable tariff could render “unplug required” during normal energy delivery.
 - HMI Stop sent the final OCPP stop immediately and painted the connector Available even though the simulated cable was still connected.
 - The wait-for-unplug transition updated only simulator memory. Without a `SuspendedEV` StatusNotification, session-service remained `CHARGING` and environment synchronization correctly restored that backend state.
+- The periodic telemetry loop treated every active transaction as charging. After suspension it emitted `Charging` plus another meter value, causing session-service to resume the transaction.
 - Tests asserted button presence but did not cover physical state gating, PnC rejection, or method metadata.
 
 ## Implemented Behavior
@@ -59,11 +60,12 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Idle-fee capability and active idle state are separate: an enabled tariff remains in Charging until the transaction is suspended or explicitly marked unplug-required.
 - HMI Stop is two-phase. It stops energy and enters unplug-required without sending the final OCPP stop; physical unplug then clears the cable state and completes the transaction. Card-present sessions bypass the security-code prompt but still require the unplug action.
 - Entering wait-for-unplug emits OCPP `SuspendedEV`, allowing the CSMS and session-service connector index to become authoritative before the next environment reconciliation.
+- Periodic charging telemetry is disabled for suspended, finishing, stopped, completed, and unplug-required transactions, preventing energy growth or an accidental resume while the cable awaits removal.
 
 ## Test Coverage
 
 - Angular: available state hides authorization methods; Preparing shows all three; component guards authorization before cable connection; idle-capable charging stays Charging; HMI Stop requests the wait-for-unplug transition.
-- Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, the pre-authorization reconciliation race, and `SuspendedEV` propagation to the CSMS.
+- Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, the pre-authorization reconciliation race, `SuspendedEV` propagation to the CSMS, and suspended-transaction telemetry suppression.
 - OCPP tests: ISO 15118 DataTransfer envelope, native 2.0.1 PnC response, session client PnC context.
 - Session tests: complete service regression suite, including existing charging, idle, fee-cap, receipt, and URL behavior.
 
