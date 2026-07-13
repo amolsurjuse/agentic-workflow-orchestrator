@@ -37,6 +37,7 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - OCPP 2.0.1 Authorize responses used the OCPP 1.6 `idTagInfo` field.
 - Blank RFID input silently became the fallback `SIMULATOR` token.
 - Contactless/PnC request errors closed the credential dialog instead of preserving the connected state and allowing retry.
+- Environment synchronization treated `Preparing` as a stale inferred session status. It could reset a physically connected cable to `Available` between plug-in and authorization, while the HMI still appeared connected.
 - Tests asserted button presence but did not cover physical state gating, PnC rejection, or method metadata.
 
 ## Implemented Behavior
@@ -51,11 +52,12 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Started PnC transactions carry `PLUG_AND_CHARGE` method and `eMAID` token metadata into session-service.
 - Rejected authorization leaves the connector Preparing and reopens the method dialog with the backend reason.
 - Blank RFID credentials are rejected instead of substituted.
+- The connector persists `cableConnectedAt` as physical state. Charger imports preserve it, and active-session reconciliation atomically keeps the EVSE Preparing until an explicit cable release clears it.
 
 ## Test Coverage
 
 - Angular: available state hides authorization methods; Preparing shows all three; component guards authorization before cable connection.
-- Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows.
+- Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, and the pre-authorization reconciliation race.
 - OCPP tests: ISO 15118 DataTransfer envelope, native 2.0.1 PnC response, session client PnC context.
 - Session tests: complete service regression suite, including existing charging, idle, fee-cap, receipt, and URL behavior.
 
