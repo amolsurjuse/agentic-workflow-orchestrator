@@ -74,3 +74,17 @@ This corresponds to 100% remaining quota.
 ## Rollback
 
 The Liquibase rollback reads each allocation's prior values from its deterministic audit record, restores those values, removes reset audit entries, and returns the plan default and description to 500 kWh. The pre-deployment export provides an additional recovery source.
+
+## Completion Status
+
+Completed on July 13, 2026.
+
+- Subscription service commit: `a345255`
+- TeamCity build: `ElectraHub_SubscriptionService_Build/977`, build number `10`
+- Production image: `amolsurjuse/subscription-service:10`
+- Production rollout: Synced and Healthy
+- Allocations reset: 963 of 963
+- Reset audit records: 963
+- Historical utilization records retained: 778
+- Target allocation API result: 5,000 kWh limit, 0 consumed, 5,000 remaining
+- Pricing preview: 20% discount applied, 1 kWh covered, quota not exhausted, 4,999 kWh remaining after preview
