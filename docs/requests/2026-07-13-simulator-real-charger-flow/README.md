@@ -38,6 +38,8 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Blank RFID input silently became the fallback `SIMULATOR` token.
 - Contactless/PnC request errors closed the credential dialog instead of preserving the connected state and allowing retry.
 - Environment synchronization treated `Preparing` as a stale inferred session status. It could reset a physically connected cable to `Available` between plug-in and authorization, while the HMI still appeared connected.
+- The HMI treated `idleFeeEnabled` as if idle charging had already begun, so an idle-capable tariff could render “unplug required” during normal energy delivery.
+- HMI Stop sent the final OCPP stop immediately and painted the connector Available even though the simulated cable was still connected.
 - Tests asserted button presence but did not cover physical state gating, PnC rejection, or method metadata.
 
 ## Implemented Behavior
@@ -53,10 +55,12 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Rejected authorization leaves the connector Preparing and reopens the method dialog with the backend reason.
 - Blank RFID credentials are rejected instead of substituted.
 - The connector persists `cableConnectedAt` as physical state. Charger imports preserve it, and active-session reconciliation atomically keeps the EVSE Preparing until an explicit cable release clears it.
+- Idle-fee capability and active idle state are separate: an enabled tariff remains in Charging until the transaction is suspended or explicitly marked unplug-required.
+- HMI Stop is two-phase. It stops energy and enters unplug-required without sending the final OCPP stop; physical unplug then clears the cable state and completes the transaction. Card-present sessions bypass the security-code prompt but still require the unplug action.
 
 ## Test Coverage
 
-- Angular: available state hides authorization methods; Preparing shows all three; component guards authorization before cable connection.
+- Angular: available state hides authorization methods; Preparing shows all three; component guards authorization before cable connection; idle-capable charging stays Charging; HMI Stop requests the wait-for-unplug transition.
 - Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, and the pre-authorization reconciliation race.
 - OCPP tests: ISO 15118 DataTransfer envelope, native 2.0.1 PnC response, session client PnC context.
 - Session tests: complete service regression suite, including existing charging, idle, fee-cap, receipt, and URL behavior.
