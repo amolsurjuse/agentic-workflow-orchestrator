@@ -38,7 +38,7 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Blank RFID input silently became the fallback `SIMULATOR` token.
 - Contactless/PnC request errors closed the credential dialog instead of preserving the connected state and allowing retry.
 - Environment synchronization treated `Preparing` as a stale inferred session status. It could reset a physically connected cable to `Available` between plug-in and authorization, while the HMI still appeared connected.
-- The HMI treated `idleFeeEnabled` as if idle charging had already begun, so an idle-capable tariff could render “unplug required” during normal energy delivery.
+- The HMI treated `idleFeeEnabled` as if idle charging had already begun, so an idle-capable tariff could render "unplug required" during normal energy delivery.
 - HMI Stop sent the final OCPP stop immediately and painted the connector Available even though the simulated cable was still connected.
 - The wait-for-unplug transition updated only simulator memory. Without a `SuspendedEV` StatusNotification, session-service remained `CHARGING` and environment synchronization correctly restored that backend state.
 - The periodic telemetry loop treated every active transaction as charging. After suspension it emitted `Charging` plus another meter value, causing session-service to resume the transaction.
@@ -68,6 +68,16 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, the pre-authorization reconciliation race, `SuspendedEV` propagation to the CSMS, and suspended-transaction telemetry suppression.
 - OCPP tests: ISO 15118 DataTransfer envelope, native 2.0.1 PnC response, session client PnC context.
 - Session tests: complete service regression suite, including existing charging, idle, fee-cap, receipt, and URL behavior.
+
+## Production Acceptance
+
+- TeamCity simulator build 37 completed successfully and image `amolsurjuse/ocpi-simulator:37` was promoted through GitOps.
+- Production HMI pricing and physical-state controls were verified on the isolated `EH-US-CHG-0799` test charger.
+- An unknown RFID remained in Preparing and displayed an authorization rejection without creating a transaction.
+- An unknown eMAID and contract certificate remained in Preparing and displayed a Plug & Charge authorization rejection without creating a transaction.
+- A contactless card created a session with `paymentMethod=CARD_PRESENT`, `authMethod=CREDIT_CARD`, and no security-code requirement.
+- Stop transitioned the connector to `SuspendedEV` and the backend session to `SUSPENDED`. The meter stayed unchanged for more than two configured telemetry intervals.
+- Physical unplug completed the backend session, cleared the persisted cable marker and active transaction, and returned the connector to Available.
 
 ## Interoperability Boundary
 
