@@ -42,6 +42,9 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - HMI Stop sent the final OCPP stop immediately and painted the connector Available even though the simulated cable was still connected.
 - The wait-for-unplug transition updated only simulator memory. Without a `SuspendedEV` StatusNotification, session-service remained `CHARGING` and environment synchronization correctly restored that backend state.
 - The periodic telemetry loop treated every active transaction as charging. After suspension it emitted `Charging` plus another meter value, causing session-service to resume the transaction.
+- The card-present end-session intent existed only in simulator memory. Environment synchronization replaced it with a backend `SUSPENDED` projection that could not distinguish an EV pause from an ended session awaiting physical unplug, allowing the connector to return to `Charging`.
+- The HMI fell back to the connector's configured maximum power when a suspended transaction had no live power value, incorrectly showing 150 kW after energy delivery ended.
+- Production disables Liquibase and relies on Hibernate schema updates. Adding a non-null boolean without a database default failed for historical rows, so the unplug-state rollout requires an idempotent `DEFAULT false NOT NULL` database migration.
 - Tests asserted button presence but did not cover physical state gating, PnC rejection, or method metadata.
 
 ## Implemented Behavior
@@ -60,6 +63,9 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Idle-fee capability and active idle state are separate: an enabled tariff remains in Charging until the transaction is suspended or explicitly marked unplug-required.
 - HMI Stop is two-phase. It stops energy and enters unplug-required without sending the final OCPP stop; physical unplug then clears the cable state and completes the transaction. Card-present sessions bypass the security-code prompt but still require the unplug action.
 - Entering wait-for-unplug emits OCPP `SuspendedEV`, allowing the CSMS and session-service connector index to become authoritative before the next environment reconciliation.
+- End-session intent is explicit across the whole path. OCPP 1.6 carries `EndSessionRequested` in `StatusNotification.info`; OCPP 2.0.1 carries `customData.endSessionRequested=true`; OCPP service forwards it; session-service persists `unplug_required_to_stop`; and the active-session projection returns it to the simulator.
+- Environment reconciliation preserves a local wait-for-unplug transition while the backend projection catches up. Once persisted, the backend flag forces `SuspendedEV`, zero power, and suspended transaction state even across simulator restarts.
+- The HMI renders live power only while the connector is actively charging. Suspended and unplug-required states display `--` instead of configured maximum power.
 - Periodic charging telemetry is disabled for suspended, finishing, stopped, completed, and unplug-required transactions, preventing energy growth or an accidental resume while the cable awaits removal.
 
 ## Test Coverage
@@ -67,7 +73,8 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - Angular: available state hides authorization methods; Preparing shows all three; component guards authorization before cable connection; idle-capable charging stays Charging; HMI Stop requests the wait-for-unplug transition.
 - Simulator Go tests: RFID accept/reject, card cable precondition, card metadata, PnC OCPP 1.6 accepted and rejected flows, cable lifecycle, environment-import preservation, the pre-authorization reconciliation race, `SuspendedEV` propagation to the CSMS, and suspended-transaction telemetry suppression.
 - OCPP tests: ISO 15118 DataTransfer envelope, native 2.0.1 PnC response, session client PnC context.
-- Session tests: complete service regression suite, including existing charging, idle, fee-cap, receipt, and URL behavior.
+- OCPP tests also cover OCPP 1.6 and 2.0.1 end-session markers and propagation to session-service.
+- Session tests: complete service regression suite, including persisted unplug-required state, active projection, charging, idle, fee-cap, receipt, and URL behavior.
 
 ## Production Acceptance
 
@@ -78,6 +85,10 @@ Make the simulator HMI behave like a public charging station rather than an oper
 - A contactless card created a session with `paymentMethod=CARD_PRESENT`, `authMethod=CREDIT_CARD`, and no security-code requirement.
 - Stop transitioned the connector to `SuspendedEV` and the backend session to `SUSPENDED`. The meter stayed unchanged for more than two configured telemetry intervals.
 - Physical unplug completed the backend session, cleared the persisted cable marker and active transaction, and returned the connector to Available.
+- Follow-up acceptance for the card-session status bounce used simulator build 38, OCPP service build 20, and session-service build 69. All TeamCity builds passed and the corresponding production workloads were healthy in Argo CD.
+- Session `a2d36bf4-069a-448b-b359-3c9f764a2ec1` on isolated charger `EH-US-CHG-0799` started as `CARD_PRESENT` / `CREDIT_CARD` with no security-code requirement. After End session, ten uncached reads over 40 seconds remained `SuspendedEV` / `SUSPENDED`, `unplugRequiredToStop=true`, power null, and meter 530 Wh. No reconciliation cycle returned the connector to Charging.
+- The HMI remained on `Session complete` / `Unplug to finish`, showed charging power `--`, and exposed exactly one `Confirm vehicle unplugged` action. Confirming unplug completed the database session with `EV_DISCONNECTED`, cleared the flag and active transaction, and returned the connector to Available.
+- The originally reported session `dbce0e31-08ba-4a05-a380-862817ade3d2` on `EH-US-CHG-0001` predated the durable marker. Reissuing its end-session intent through the public simulator contract migrated it to the persisted unplug-required state; the reported URL now renders the same stable unplug screen without completing the user's physical-unplug action.
 
 ## Interoperability Boundary
 
