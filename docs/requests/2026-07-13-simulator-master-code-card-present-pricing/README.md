@@ -98,3 +98,19 @@ OCPI parking price takes precedence as the connector idle rate. Pricing-plan val
   - invalid code rejection;
   - HMI tariff values against the connector GraphQL/Elasticsearch tariff;
   - displayed caps against the applicable pricing plan.
+
+## Deployment Record
+
+Deployed to production on 2026-07-13:
+
+- `session-service` commit `46bcd2c`, TeamCity build `978`, image `amolsurjuse/session-service:65`.
+- `ocpi-simulator` commit `8253616`, TeamCity build `979`, image `amolsurjuse/ocpi-simulator:29`.
+- Argo CD applications `session-service-prod` and `ocpp-simulator-prod` reached `Synced / Healthy`.
+- Both Kubernetes deployments completed rollout with zero pod restarts.
+
+Live validation results:
+
+- Master code `1711` returned `valid=true` for an active session while preserving charger and connector matching.
+- The public connector-pricing endpoint returned the OCPI tariff and pricing-plan caps for `EH-US-CHG-0001 / CON-US-0001`.
+- The production mobile HMI rendered energy, time, flat, and idle prices plus idle/session caps without horizontal overflow or control overlap.
+- Card-present code-less authorization remains covered by Java, Go proxy, environment-projection, and UI contract tests; no synthetic card payment was created in production.
