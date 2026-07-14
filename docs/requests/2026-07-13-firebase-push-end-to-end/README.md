@@ -137,6 +137,8 @@ Validated between 02:02 and 02:24 UTC on July 14, 2026:
 - A unique live verification notification passed device lookup and asynchronous queueing. FCM rejected the iOS delivery with `THIRD_PARTY_AUTH_ERROR`, proving that quota accounting and device registration are no longer blockers.
 - Firebase defines `THIRD_PARTY_AUTH_ERROR` for an Apple target as a missing or invalid APNs authentication key/certificate. No APNs `.p8` or `.p12` credential is present in the workspace, and credential material must not be committed.
 - Revision `dff584a` classifies this APNs configuration error as permanent so it is recorded once rather than retried four times and republished to the dead-letter queue.
+- TeamCity build `1023` succeeded for revision `dff584a` and published image `amolsurjuse/notification-service:6`. Production was promoted at GitOps revision `d18dfdd` and Argo CD reported Synced and Healthy.
+- A post-deployment verification produced one failed attempt with `THIRD_PARTY_AUTH_ERROR`, no quota error, no retry, and no new DLQ message. The synthetic verification rows and the earlier synthetic DLQ entry were removed after validation.
 
 Required external credential action:
 
