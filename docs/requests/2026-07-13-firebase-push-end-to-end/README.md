@@ -124,3 +124,23 @@ The mobile registration lifecycle was hardened as follows:
 - Android retries registration after transient failures and rechecks registration when notification permission is granted and whenever the authenticated activity resumes.
 
 After installing the corrected mobile build, validate an `ACTIVE` row for the signed-in user before testing a charging notification. If iOS reports an APNs registration error, verify the app is running as a signed physical-device build and the Firebase iOS application has a valid APNs key or certificate.
+
+## Push Quota And APNs Incident
+
+Validated between 02:02 and 02:24 UTC on July 14, 2026:
+
+- The affected iOS device successfully registered for user `eda84789-2a1c-42de-844f-72efd53cea16`; production contains one `ACTIVE` Firebase device.
+- The original push quota implementation counted every attempted record, including `SKIPPED` and `FAILED` notifications. Production contained 50,715 skipped pushes and four failed pushes in the preceding 24 hours, but zero successful pushes.
+- Notification service revision `6bed918` changes push quota accounting to count only provider-accepted `DISPATCHED` pushes by `dispatched_at`. A composite `(channel, status, dispatched_at)` index keeps the rolling-window query bounded as history grows.
+- TeamCity build `1022` succeeded and published multi-architecture image `amolsurjuse/notification-service:5`.
+- Production was promoted at GitOps revision `6ef2d56`; Argo CD reported Synced and Healthy, Liquibase applied change set `006`, and the replacement pod became ready with zero restarts.
+- A unique live verification notification passed device lookup and asynchronous queueing. FCM rejected the iOS delivery with `THIRD_PARTY_AUTH_ERROR`, proving that quota accounting and device registration are no longer blockers.
+- Firebase defines `THIRD_PARTY_AUTH_ERROR` for an Apple target as a missing or invalid APNs authentication key/certificate. No APNs `.p8` or `.p12` credential is present in the workspace, and credential material must not be committed.
+- Revision `dff584a` classifies this APNs configuration error as permanent so it is recorded once rather than retried four times and republished to the dead-letter queue.
+
+Required external credential action:
+
+1. In the Apple Developer account, create or retrieve an APNs authentication key for the team that signs bundle `net.electrahub.driverportalios`.
+2. In Firebase project `electra-hub`, open Project settings, then Cloud Messaging.
+3. Under the iOS application `net.electrahub.driverportalios`, upload the APNs `.p8` key and enter its Apple Key ID and Team ID. An APNs key supports both sandbox and production delivery.
+4. Send a new unique verification notification and require a Firebase provider message ID plus notification row status `DISPATCHED` before closing the incident.
