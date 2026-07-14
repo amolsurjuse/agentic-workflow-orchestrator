@@ -6,13 +6,13 @@ Investigate why Driver Portal iOS charging history shows exactly 50 sessions eve
 
 ## Production Evidence
 
-For driver account `eda84789-2a1c-42de-844f-72efd53cea16`, the production session database contains:
+For driver account `eda84789-2a1c-42de-844f-72efd53cea16`, the initial production database check contained:
 
 - 61 completed or billed charging sessions
 - 16 invalid or failed start attempts
 - 77 raw session records
 
-The charging history count should be 61. Invalid start attempts are operational records, not completed charging history.
+The charging history count was therefore 61 at investigation time. Invalid start attempts are operational records, not completed charging history. One additional session completed during deployment validation, so the live authoritative count subsequently advanced to 62 without a client change.
 
 ## Root Cause
 
@@ -41,7 +41,7 @@ Response contract:
 ```json
 {
   "content": [],
-  "totalElements": 61,
+  "totalElements": 62,
   "totalPages": 2,
   "page": 0,
   "size": 50,
@@ -76,6 +76,10 @@ The new endpoint reads only the requested page from PostgreSQL. The count is per
 - Session-service test suite: 56 passed, 0 failed.
 - Stable page JSON contract has a focused serialization test.
 - Modified iOS files pass Swift 6 parser validation.
+- TeamCity session-service build 76 completed successfully and deployed image `amolsurjuse/session-service:76`.
+- The production Argo CD application is synced and healthy on revision `9fbe6234875a78c99b5483041ba04a51c788ccc5`.
+- Live page 0 returns 50 rows with `totalElements: 62` and `hasNext: true`.
+- Live page 1 returns the remaining 12 unique completed sessions with `hasNext: false`.
 - Full iOS packaging requires Xcode/macOS and cannot run in the Windows workspace.
 
 ## Acceptance Criteria
