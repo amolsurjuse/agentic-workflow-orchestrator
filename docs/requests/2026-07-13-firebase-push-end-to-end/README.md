@@ -111,3 +111,16 @@ Validated on July 13, 2026:
 - Authenticated registration through both route forms succeeds, binds the stored identity to the JWT user, ignores spoofed client identity fields, and unregisters with HTTP 204.
 - Database cleanup confirms no synthetic validation device remains active.
 - Production still has zero real active mobile registrations. The updated iOS and Android binaries must be signed, distributed, installed, opened, and authenticated before real FCM/APNs delivery can be proven.
+
+## Post-Rollout Registration Incident
+
+At 01:56 UTC on July 14, domain events for user `eda84789-2a1c-42de-844f-72efd53cea16` reached notification service but were skipped because no active Firebase device existed. Production evidence showed only three deleted synthetic validation registrations, no registration row for the affected user, and no mobile `/push/devices` request reaching notification service.
+
+The mobile registration lifecycle was hardened as follows:
+
+- iOS no longer relies on one silent registration attempt. It retries transient APNs, FCM, and backend failures after 5, 30, and 120 seconds.
+- iOS retries registration whenever the authenticated app returns to the foreground.
+- iOS waits up to 30 seconds for the APNs device token and logs APNs and backend registration failures through unified logging in both Debug and Release builds.
+- Android retries registration after transient failures and rechecks registration when notification permission is granted and whenever the authenticated activity resumes.
+
+After installing the corrected mobile build, validate an `ACTIVE` row for the signed-in user before testing a charging notification. If iOS reports an APNs registration error, verify the app is running as a signed physical-device build and the Firebase iOS application has a valid APNs key or certificate.
