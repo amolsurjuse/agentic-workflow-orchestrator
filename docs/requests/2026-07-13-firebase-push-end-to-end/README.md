@@ -96,3 +96,18 @@ Service-account credentials and APNs private credentials must never be stored in
 - iOS APNs credential validity and token delivery require a signed physical-device build. The Firebase console must contain a valid APNs authentication key or certificate for the production iOS app.
 - Monitor active device count, dispatch outcome counts, invalid-token deactivations, retry counts, and `notifications.dispatch.dlq` depth.
 - DLQ replay must be an explicit operator action after the underlying provider or configuration issue is corrected. Preserve the original notification id to retain idempotency.
+
+## Production Rollout Result
+
+Validated on July 13, 2026:
+
+- TeamCity API gateway build `1018` succeeded for revision `125f1b8c` and published image tag `32`.
+- TeamCity notification service build `1019` succeeded for revision `94f09c93` and published image tag `3`.
+- Argo CD reports both production applications Synced and Healthy at GitOps revision `413a3a5`.
+- Production runs `amolsurjuse/api-gateway:32` and `amolsurjuse/notification-service:3` with ready replicas, zero pod restarts, and no recent notification-service errors.
+- Firebase secret metadata resolves to project `electra-hub` and a configured service account without exposing credential material.
+- RabbitMQ declares `notifications.dispatch.dlq`; its post-rollout depth is zero.
+- Anonymous registration through both `/notifications` and `/notification` returns HTTP 401.
+- Authenticated registration through both route forms succeeds, binds the stored identity to the JWT user, ignores spoofed client identity fields, and unregisters with HTTP 204.
+- Database cleanup confirms no synthetic validation device remains active.
+- Production still has zero real active mobile registrations. The updated iOS and Android binaries must be signed, distributed, installed, opened, and authenticated before real FCM/APNs delivery can be proven.
