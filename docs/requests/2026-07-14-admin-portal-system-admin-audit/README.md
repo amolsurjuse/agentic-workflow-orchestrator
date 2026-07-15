@@ -122,11 +122,43 @@ Required fix: align labels with behavior, isolate destructive actions, and retai
 - [x] Mobile walkthrough completed
 - [x] Source/API gap analysis completed
 - [x] Issue set frozen before implementation
-- [ ] Persistent reference-data APIs implemented
-- [ ] Real view/edit flows implemented
-- [ ] Pagination and totals corrected
-- [ ] Sparky page context corrected
-- [ ] Mobile and accessibility defects corrected
-- [ ] Automated builds/tests passed
-- [ ] Production deployment completed
-- [ ] Production Chrome re-audit passed
+- [x] Persistent reference-data APIs implemented
+- [x] Real inventory view/edit flows implemented
+- [x] Pagination and totals corrected
+- [x] Sparky page context corrected
+- [x] Mobile and accessibility defects corrected
+- [x] Automated builds/tests passed
+- [x] Production deployment completed
+- [x] Production Chrome re-audit passed
+
+## Implementation And Production Verification
+
+Completed on 2026-07-15 after the issue set above was frozen.
+
+### Delivered changes
+
+- Added persistent charger-management-service CRUD for network operators, station makes, port levels, station models, site controllers, and charger groups.
+- Added update contracts for chargers, EVSEs, and connectors and retained stable record identifiers during edits.
+- Replaced search-only View actions with read-only detail screens and explicit Back/Edit actions.
+- Added 25-row paging to location, charger, EVSE, and connector inventory screens. Production now reports `Showing 1-25 of 1053` connectors.
+- Removed the misleading regular-user Edit action; the remaining View action is intentionally read-only.
+- Passed the selected dashboard period, filters, revenue, session count, energy, unique users, and average session value to Sparky.
+- Added mobile record cards for persistent reference data and connectors, constrained the charging-session layout, and corrected global phone-width overflow.
+
+### Build and deployment evidence
+
+- `charger-management-service` TeamCity build `#15`: success; production image `amolsurjuse/charger-management-service:15`.
+- `ai-support-service` TeamCity build `#3`: success; production image `amolsurjuse/ai-support-service:3`.
+- `admin-portal-ui` TeamCity build `#42`: success; production image `amolsurjuse/admin-portal-ui:42`.
+- Production Argo applications for all three services were synced and reached `Healthy`.
+
+### Production Chrome evidence
+
+- Re-ran all 23 routes as `SYSTEM_ADMIN`; every route loaded without an application alert.
+- Exercised list, detail, add, and edit states for hierarchy, reference-data, charger, EVSE, connector, pricing, subscription, user, RBAC, receipt, notification, and charger-configuration surfaces without submitting destructive mutations.
+- Confirmed charger, EVSE, and connector Edit states are prefilled and submit as `Update`, not `Create`.
+- Confirmed an unread notification changes from unread to read when opened (`7` to `6`).
+- Confirmed a completed session receipt displays charging cost, idle fee, taxes, subscription discount, total, payment method, and status.
+- At a 390 px Chrome viewport, the audited pages have no document-level horizontal overflow. Connector and reference-data mobile cards are visible and inventory detail/edit screens remain within the viewport.
+- Confirmed Sparky returned the exact live dashboard value: `USD 72,128.91` for 1,721 completed sessions in the selected period.
+- Desktop and mobile Chrome console diagnostics contained no errors or warnings.
