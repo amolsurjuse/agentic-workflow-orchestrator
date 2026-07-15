@@ -79,10 +79,17 @@ The remaining active-session entry is intentional because this price plan has id
 - [x] session-service full suite passed: 61 tests.
 - [x] OCPP focused tests passed.
 - [x] OCPP full suite passed: 17 tests.
-- [ ] Changes committed and pushed to `develop`.
-- [ ] TeamCity builds completed.
-- [ ] Production images deployed and Argo applications healthy.
-- [ ] Post-deployment low-balance regression completed.
+- [x] Changes committed and pushed to `develop`.
+- [x] TeamCity builds completed.
+- [x] Production images deployed and Argo applications healthy.
+- [x] Post-deployment low-balance regression completed.
+
+Deployment evidence:
+
+- `session-service` commit `c4b31c7`, TeamCity build `#77`, image `amolsurjuse/session-service:77`.
+- `ocpp-service` commit `a50cb81`, TeamCity build `#21`, image `amolsurjuse/ocpp-service:21`.
+- JMeter regression commit `84d092f` tightened the low-balance completion contract.
+- Production JMeter session `271031cd-0ef9-4c28-9103-d40dc42e3e86` reached `SUSPENDED`, completed after simulated unplug, and produced a completed receipt at the configured `$100.00` session cap with zero test errors.
 
 ## Follow-Up Design Debt
 
