@@ -18,6 +18,8 @@ Hiding a navigation item is not an authorization control. A read-only account co
 
 Production validation also found driver names and email addresses in the dashboard leaderboard. Read-only users therefore retain aggregate revenue, session, energy, and utilization analytics, but the portal does not request or render driver leaderboards, per-driver session detail, or user-report downloads. Gateway DENY rules protect those billing analytics endpoints from direct access.
 
+The system-admin regression check exposed an existing N+1 lookup in driver analytics: billing resolved as many as 500 user identities with one user-service request per ID. Billing now sends one deduplicated batch request to a `SYSTEM_ADMIN`-only directory endpoint. User-service loads the requested users and roles in one repository query, returns at most 500 entries, and excludes phone and address data from the internal response.
+
 ## Protected routes
 
 | Route | Read-only admin | System admin |
@@ -26,6 +28,7 @@ Production validation also found driver names and email addresses in the dashboa
 | `/user/api/v1/users/**` | `403 Forbidden` | Allowed according to the existing user-service policy |
 | `GET /user/api/v1/admin/users` | `403 Forbidden` | Allowed |
 | `/user/api/v1/admin/users/**` | `403 Forbidden` | Allowed according to the existing admin policy |
+| `POST /user/api/v1/admin/users/resolve` | `403 Forbidden` | Allowed; bounded to 500 IDs |
 | Admin portal `/users` | `Not authorized` page | User list |
 | Admin portal `/admin-users` | `Not authorized` page | Admin user list |
 | Admin portal `/rbac/policy` | `Not authorized` page | RBAC policy editor |
@@ -43,8 +46,13 @@ User-service Liquibase change `0025-deny-readonly-admin-user-data` removes the p
 - Admin portal TypeScript and Vite production build.
 - Gateway authorization test covers customer/admin list and detail paths for both roles.
 - User-service tests assert search and count reject `ADMIN_READ_ONLY` before repository access.
+- User-service test asserts batch resolution deduplicates IDs and uses one repository call.
+- Billing client test asserts one HTTP request resolves multiple unique user IDs.
 - Full gateway and user-service test suites.
+- Full billing-service test suite.
 - Production browser validation with read-only and system-admin sessions after deployment.
+- Production API matrix confirms read-only identity endpoints return `403`, aggregate analytics remains `200`, and system-admin identity endpoints return `200`.
+- Warm production driver analytics completed in approximately `364-511 ms`; the previous path timed out after approximately `14 seconds`.
 
 ## Acceptance criteria
 
@@ -56,5 +64,5 @@ User-service Liquibase change `0025-deny-readonly-admin-user-data` removes the p
 - [x] Gateway denies read-only driver leaderboard, per-driver session, and user-report requests.
 - [x] User-service rejects read-only directory access before database access.
 - [x] System-admin user-management access is unchanged.
-- [ ] Production deployment completed.
-- [ ] Production role-based browser and API validation completed.
+- [x] Production deployment completed.
+- [x] Production role-based browser and API validation completed.
