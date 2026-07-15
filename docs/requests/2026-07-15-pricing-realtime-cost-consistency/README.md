@@ -56,6 +56,7 @@ The columns are nullable to allow a rolling deployment and legacy-session backfi
 ## Validation
 
 - Pricing-service commit: `c6ff2e3` (`fix: pin charging cost to connector tariff`).
+- Pricing-service energy-step commit: `a8f5db2` (`fix: apply OCPI energy steps in watt-hours`).
 - Session-service commit: `09bc5a3` (`fix: keep session pricing aligned with connector tariff`).
 - Pricing-service tests: `6/6` passed.
 - Session-service tests: `64/64` passed.
@@ -67,7 +68,15 @@ The columns are nullable to allow a rolling deployment and legacy-session backfi
   - parking: `$0.0000`
   - flat fee: `$0.00`
   - gross total: `$0.3387`
+- OCPI 2.2.1 defines `ENERGY step_size` in Wh; `step_size=1` bills with 1 Wh precision:
+  - https://github.com/ocpi/ocpi/blob/release-2.2.1-bugfixes/mod_tariffs.asciidoc
 - `git diff --check` passed in both backend repositories.
+- TeamCity pricing builds `17` and `18` passed.
+- TeamCity session build `84` passed.
+- Production images deployed: `pricing-service:18`, `session-service:84`.
+- Production exact-plan API returned energy `$0.2870`, time `$0.0517`, parking `$0`, flat `$0`, total `$0.3387`.
+- Production idle-policy API returned `enabled=false` and `pricePerMinute=0`.
+- The legacy active session was backfilled to tariff `...0196`; its Redis projection reports idle disabled and zero idle amount.
 
 ## Acceptance Criteria
 
@@ -77,5 +86,5 @@ The columns are nullable to allow a rolling deployment and legacy-session backfi
 - [x] Realtime and final calculations use the same pinned pricing plan.
 - [x] Existing active sessions can acquire the correct tariff snapshot.
 - [x] Backend tests cover the reported tariff.
-- [ ] Deploy pricing-service and session-service builds.
-- [ ] Validate the production active-session API and SSE payload.
+- [x] Deploy pricing-service and session-service builds.
+- [x] Validate the production active-session projection and pricing APIs.
