@@ -14,33 +14,31 @@ The persisted lifecycle state remains `SUSPENDED` inside `session-service` becau
 - Return to charging if the charger resumes energy delivery
 - Complete only after an accepted terminal event
 
-`IDLE` is the driver-facing projection of that state. It is not a new database state and does not change billing, idle-fee caps, unplug authorization, payment settlement, or receipt timing.
+`Idle` is the driver-facing display label for that state. It is not a new database state and does not change billing, idle-fee caps, unplug authorization, payment settlement, or receipt timing.
 
 ## Contract
 
-For active-session REST and SSE payloads:
+For backward compatibility with installed mobile versions, active-session REST and SSE payloads retain the existing value:
 
 ```json
 {
-  "status": "IDLE",
+  "status": "SUSPENDED",
   "unplugRequiredToStop": true
 }
 ```
 
-The backend must not expose `SUSPENDED` to driver clients. Admin and operational data may continue using the internal lifecycle value where appropriate.
+Updated mobile clients render `SUSPENDED` as `Idle`. They also accept a future additive `IDLE` value, but the server must not switch the wire value until supported mobile versions have been released and the compatibility window has passed.
 
 ## Backend Changes
 
 Repository: `session-service`
 
-Commit: `e0a2307` (`fix: expose stopped connected sessions as idle`)
+Commits:
 
-- `DriverChargingOrchestrationService` maps domain `SUSPENDED` to driver `IDLE`.
-- `ActiveSessionResponse` normalizes legacy `SUSPENDED` values to `IDLE` during construction and deserialization.
-- Redis projections therefore return `IDLE`, including cached maps reconstructed after deployment.
-- Elasticsearch writes new current-session documents with `IDLE`.
-- Elasticsearch queries temporarily accept both `IDLE` and legacy `SUSPENDED` documents during migration.
-- Existing session completion and receipt behavior is unchanged.
+- `e0a2307` initially introduced an `IDLE` wire value.
+- `3f13bc3` (`fix: preserve active-session status compatibility`) superseded that contract before final delivery.
+
+The final backend behavior preserves `SUSPENDED` across REST, Redis, Elasticsearch, and SSE. This avoids decode failures in already-installed iOS versions whose strict enum does not yet contain `IDLE`. Existing session completion and receipt behavior remains unchanged.
 
 ## iOS Changes
 
@@ -68,9 +66,8 @@ Commit: `7973e28` (`fix: display stopped connected sessions as idle`)
 
 Backend:
 
-- 66 Maven tests passed in Linux with JDK 21.
-- Added mapping and stale-projection compatibility tests.
-- TeamCity `ElectraHub_SessionService_Build` build `#82` succeeded.
+- 63 Maven tests passed in Linux with JDK 21 after restoring the compatible wire contract.
+- TeamCity `ElectraHub_SessionService_Build` build `#83` succeeded.
 
 Android:
 
@@ -85,8 +82,8 @@ iOS:
 
 ## Deployment
 
-- Image: `amolsurjuse/session-service:82`
-- k8s-platform revision: `9961ba3`
+- Image: `amolsurjuse/session-service:83`
+- k8s-platform revision: `21a8ddc`
 - Argo CD application: `session-service-prod`
 - Argo state: `Synced / Healthy`
 - Deployment: 2 ready, updated, and available replicas
@@ -96,7 +93,9 @@ iOS:
 Session `83c667ac-3ca2-469e-b03f-55037dee40d1` was used to verify the contract:
 
 - PostgreSQL lifecycle status: `SUSPENDED`
-- Driver active-session API status: `IDLE`
+- Driver active-session API status: `SUSPENDED`
+- Updated iOS display label: `Idle`
+- Updated Android display label: `IDLE`
 - `unplugRequiredToStop`: `true`
 - Idle fee and cap remained backend-authoritative
 - Simulator access remained present for unplug
@@ -105,9 +104,8 @@ Session `83c667ac-3ca2-469e-b03f-55037dee40d1` was used to verify the contract:
 
 - [x] Stopped-but-connected sessions display as Idle.
 - [x] Internal lifecycle remains non-terminal until unplug.
-- [x] REST, Redis, Elasticsearch, and SSE use the driver-facing contract.
-- [x] Cached legacy `SUSPENDED` projections normalize to `IDLE`.
-- [x] iOS decodes and displays `IDLE`.
-- [x] Android decodes and displays `IDLE`.
+- [x] REST, Redis, Elasticsearch, and SSE remain backward compatible.
+- [x] iOS displays `SUSPENDED` as Idle and can decode future `IDLE` values.
+- [x] Android displays `SUSPENDED` as Idle and can decode future `IDLE` values.
 - [x] Existing charging, idle-fee, unplug, and receipt behavior remains unchanged.
 - [x] Backend is deployed and verified in production.
