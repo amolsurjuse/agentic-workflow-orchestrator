@@ -79,5 +79,31 @@ battery. This made a partial telemetry message override the explicit OCPP
 
 ## Status
 
-Implementation and automated verification are complete. Commit, CI rollout,
-and production event verification follow this record.
+Implemented, deployed, and verified in production.
+
+### Release Evidence
+
+- Session-service commit `686dea2`, TeamCity build `88`, production image
+  `amolsurjuse/session-service:88`.
+- OCPP-service commit `f3bf3fe`, TeamCity build `22`, production image
+  `amolsurjuse/ocpp-service:22`.
+- Simulator commit `792a810`, TeamCity build `42`, production image
+  `amolsurjuse/ocpi-simulator:42`.
+- Kubernetes promotion revision `9742211`; all three Argo CD applications
+  reported `Synced` and `Healthy` at that revision.
+
+### Production Acceptance Journey
+
+A one-user production idle-fee journey completed with zero JMeter errors:
+
+- Account `278bc8b0-7837-4277-8bc4-d57cf5840553`
+- Session `179d3d07-aa97-4d2d-960a-1a226ddb0b0b`
+- Charger/connector `EH-US-CHG-0071 / CON-US-0071`
+- Session start: `2026-07-15T21:52:06Z`
+- Deliberate remote stop: `2026-07-15T21:52:22Z`
+- Legitimate idle notifications: `2026-07-15T21:52:23Z`
+- Unplug and completion: `2026-07-15T21:53:32Z`
+
+No idle notification was created during the charging interval, and no
+battery-full notification was created during the journey. Receipt generation
+completed after unplug as expected.
