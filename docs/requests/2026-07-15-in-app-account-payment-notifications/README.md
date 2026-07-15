@@ -98,4 +98,23 @@ Implementation is complete and local verification passed on 2026-07-15:
 - Android unit/build tasks completed and produced a debug APK;
 - iOS was contract-reviewed and requires no source change.
 
-Production deployment and live inbox evidence are in progress.
+Production deployment and live inbox verification completed on 2026-07-15:
+
+- TeamCity builds passed for payment-service (`1073`), user-service (`1071`),
+  and notification-service (`1072`).
+- Argo CD reports the production payment-service, user-service, and
+  notification-service applications as `Synced` and `Healthy`.
+- Production is running payment-service image `12`, user-service image `38`,
+  and notification-service image `9`.
+- A controlled driver account exercised card add/remove, auto top-up
+  enable/update/disable, automatic top-up completion, manual wallet top-up,
+  and profile update through the public API gateway.
+- All eight template types were returned by the authenticated inbox API with
+  `channel=IN_APP` and `status=DELIVERED`.
+- Direct database verification found no matching `PUSH`, `EMAIL`, or `SMS`
+  notification rows.
+- All 11 payment outbox rows and both user profile outbox rows created during
+  the verification reached `PUBLISHED`; no test outbox row remained pending or
+  failed.
+- The card test data was represented only as `Visa ending in 1111`; profile
+  notifications contained no profile values.
