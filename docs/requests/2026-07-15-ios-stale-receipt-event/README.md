@@ -42,11 +42,17 @@ Prevent a newly started iOS charging session from showing the charging-complete 
 
 ## Validation
 
+- Session-service commit: `1c6adce`.
+- Driver Portal iOS commit: `c661e95`.
 - Session-service tests: `68/68` passed.
 - Added coverage for receipt-cache invalidation and Redis-failure tolerance.
 - `git diff --check` passed for session-service and driver-portal-ios.
 - Confirmed `PREPARING` is already included in backend driver-visible active statuses.
 - Confirmed production continued receiving meter values for the reported active session while iOS displayed the stale completion overlay.
+- TeamCity session-service build `85` passed for commit `1c6adce`.
+- Production is `Synced/Healthy` on `amolsurjuse/session-service:85` with two ready replicas and zero restarts.
+- The production Redis receipt replay scan returned no stale account receipt keys.
+- The reported session remained backend-active as `SUSPENDED` after deployment, confirming that the completion overlay was client state rather than a completed session.
 - iOS compilation requires the macOS/Xcode CI environment and cannot run in the Windows workspace.
 
 ## Acceptance Criteria
@@ -57,5 +63,5 @@ Prevent a newly started iOS charging session from showing the charging-complete 
 - [x] Delayed receipt tasks cannot carry over to a later session.
 - [x] Backend regression tests pass.
 - [ ] iOS CI build passes.
-- [ ] Session-service is deployed to production.
+- [x] Session-service is deployed to production.
 - [ ] A production start immediately after a prior receipt remains on Live Charging.
