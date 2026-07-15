@@ -105,4 +105,13 @@ After charging stops, accrued idle fees reduce the remaining idle exposure by th
 - [x] Credit-card starts are unaffected.
 - [x] Unit coverage protects the formulas and boundaries.
 - [x] JMeter regression covers rejection below cap plus allowance.
-- [ ] TeamCity build and deployed API validation completed.
+- [x] TeamCity build and deployed API validation completed.
+
+## Validation Evidence
+
+- Session-service unit suite: `72` tests passed.
+- TeamCity `ElectraHub_SessionService_Build` build `86`: passed.
+- Production deployment: `amolsurjuse/session-service:86`, two ready replicas.
+- Argo CD `session-service-prod`: `Synced` and `Healthy` at revision `7bf839af794c0f52b9b72467eca840fef71b8295`.
+- Focused production JMeter regression: passed with one user and zero failed samples.
+- Production API boundary: wallet balance `54.99` was rejected against required balance `55.00`, with top-up and credit-card guidance, and no active session was created.
