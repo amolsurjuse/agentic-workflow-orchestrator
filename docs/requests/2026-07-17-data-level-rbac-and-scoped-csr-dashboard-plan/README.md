@@ -593,7 +593,7 @@ Subscription utilization is not yet backed by an immutable location/network owne
 | Session service | `e8893b1`, `68c40f0`, `257d7fe` | `amolsurjuse/session-service:rbac-scope-20260717-3` |
 | Billing service | `11fbf2e`, `6a48376`, `719524c` | `amolsurjuse/billing-service:rbac-scope-20260717-3` |
 | Admin portal | `e01ad5e`, `5471506` | `amolsurjuse/admin-portal-ui:rbac-scope-20260717-2` |
-| GitOps promotion | `55c0995`, `3b3cbb4` in `k8s-platform` | ArgoCD applications synchronized and healthy |
+| GitOps promotion | `55c0995`, `3b3cbb4`, `dfca848` in `k8s-platform` | ArgoCD applications synchronized and healthy |
 
 The shared production access-context secret is injected from a Kubernetes Secret into the gateway and all scope-verifying services. It is not recorded in source control or this document.
 
@@ -604,6 +604,7 @@ The shared production access-context secret is injected from a Kubernetes Secret
 - Session-service test suite passed, including a regression test that signs the full canonical gateway payload with hierarchy claims and a future field.
 - Admin portal production build passed.
 - All affected ArgoCD applications reached `Synced` and `Healthy`; the session-service deployment reached `2/2` ready on `rbac-scope-20260717-3`.
+- The final GitOps reconciliation pins the verified charger-management, session, and billing images, preventing unrelated automated version tags from replacing the scoped-access release.
 - Production gateway health endpoint returned HTTP 200.
 - A production read-only administrator browser test verified all of the following:
   - only the scoped-safe navigation items are shown;
