@@ -31,7 +31,7 @@ Correct the simulator when a connector detail screen reports an offline or error
 - Inspect only `ACTIVE` and `SUSPENDED` sessions, ordered by `started_at`, in a bounded batch of at most 100 rows per scheduler run.
 - Add a `(status, started_at)` database index for the recurring query.
 - Atomically claim each eligible session with a conditional update before finalizing it. This prevents the two production replicas from terminating the same session twice.
-- Mark the claimed session `COMPLETED` with `TIMED_OUT`, calculate the final capped cost, publish the normal terminal event, queue receipt generation, and remove the driver-visible active session projection.
+- Mark the claimed session `COMPLETED` with `TIMED_OUT`, calculate the final capped cost, publish the normal terminal event, queue receipt generation, and remove the driver-visible active session projection. The audit event identifier is deliberately kept within the existing 30-character `session_events.event_type` contract.
 - For a truly `ACTIVE` transaction, issue a best-effort OCPP remote stop after the transaction commits. For `SUSPENDED` idle-fee sessions, do not issue a duplicate remote stop because the charge point has already stopped energy delivery.
 - Keep connector occupancy until an explicit physical `Available` event arrives, while preventing the expired session from remaining visible as active to the driver.
 - Ignore a late duplicate OCPP `StopTransaction` for an already terminal session so it cannot recreate a suspended idle session.
