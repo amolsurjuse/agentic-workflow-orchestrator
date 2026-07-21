@@ -578,6 +578,7 @@ payment_intent
   charging_currency, presentment_currency, merchant_settlement_currency
   merchant_account_snapshot_id, route_snapshot_id
   quote_id, original_authorization_minor, final_charge_minor
+  start_attempt_id, financial_start_status, early_failure_policy_snapshot_id
   status, created_at, updated_at
 
 payment_attempt
@@ -590,6 +591,25 @@ payment_attempt
 authorization_hold
   id, intent_id, provider_reference, authorized_money, current_authorized_money
   capturable_money, expires_at, adjustment_count, state
+
+charging_start_attempt
+  id, intent_id, session_id, charger_id, connector_id
+  ocpp_command_correlation_id, ocpp_transaction_reference nullable
+  command_status, physical_start_status, confirmation_deadline_at
+  first_meter_at nullable, first_meter_wh nullable, terminal_reason nullable
+  compensation_state, created_at, updated_at
+
+payment_recovery_action
+  id, intent_id, start_attempt_id nullable
+  action_type: VOID_AUTHORIZATION | RELEASE_WALLET_RESERVE | REFUND_CAPTURE |
+               STOP_AND_RECONCILE | PROVIDER_INQUIRY
+  reason_code, idempotency_key, provider_reference nullable
+  status, requested_at, completed_at nullable, failure_detail_safe
+
+payment_refund
+  id, intent_id, original_capture_attempt_id, recovery_action_id
+  amount_minor, tax_minor, currency, reason_code
+  provider_refund_reference, status, created_at, completed_at nullable
 
 financial_ledger_entry
   id, intent_id, entry_type, Money, account/scope, source_attempt_id
@@ -622,11 +642,19 @@ stateDiagram-v2
     AUTHORIZATION_PENDING --> AUTHORIZED
     AUTHORIZATION_PENDING --> DECLINED
     AUTHORIZATION_PENDING --> FAILED
-    AUTHORIZED --> CHARGING
+    AUTHORIZED --> START_COMMAND_PENDING
+    START_COMMAND_PENDING --> START_CONFIRMATION_PENDING
+    START_COMMAND_PENDING --> VOID_PENDING
+    START_CONFIRMATION_PENDING --> CHARGING
+    START_CONFIRMATION_PENDING --> START_CONFIRMATION_UNKNOWN
+    START_CONFIRMATION_PENDING --> VOID_PENDING
+    START_CONFIRMATION_UNKNOWN --> CHARGING
+    START_CONFIRMATION_UNKNOWN --> VOID_PENDING
     CHARGING --> AUTHORIZATION_ADJUSTMENT_PENDING
     AUTHORIZATION_ADJUSTMENT_PENDING --> CHARGING
     AUTHORIZATION_ADJUSTMENT_PENDING --> STOP_REQUIRED
     CHARGING --> CAPTURE_PENDING
+    CHARGING --> VOID_PENDING
     STOP_REQUIRED --> CAPTURE_PENDING
     CAPTURE_PENDING --> CAPTURED
     CAPTURE_PENDING --> CAPTURE_FAILED
@@ -645,6 +673,12 @@ stateDiagram-v2
 
 `session-service` can move the physical session to `ACTIVE` only after payment
 intent is `AUTHORIZED` or the selected rail's equivalent eligible state.
+
+`START_COMMAND_PENDING`, `START_CONFIRMATION_PENDING`, and
+`START_CONFIRMATION_UNKNOWN` are persisted financial orchestration states, not
+user-facing charging states. A positive OCPP remote-start command response is
+not treated as proof that energy delivery started. `CHARGING` requires the
+correlated physical-start evidence defined in section 9.2.1.
 
 Capture confirmation may be asynchronous. A completed charging receipt can
 show `PAYMENT_PROCESSING` while the provider capture is pending. It must never
@@ -692,7 +726,8 @@ sequenceDiagram
     G-->>P: AUTHORIZED normalized event
     P-->>S: Authorized intent and hold
     S->>O: Remote start only now
-    O-->>S: OCPP start confirmation
+    O-->>S: Command accepted or rejected
+    O-->>S: Correlated transaction-start/status/meter evidence
     S->>P: Final quote and capture at completion
     P->>G: Capture request
     G->>X: Capture
@@ -703,6 +738,151 @@ sequenceDiagram
 If the provider returns `REQUIRES_CUSTOMER_ACTION`, the app completes the
 provider's hosted SDK/browser flow and resumes using the same intent. It does
 not create another charging session or a second authorization.
+
+### 9.2.1 Financial Authorization, Physical Start, And Compensation
+
+Do **not** invert the sequence to start energy delivery before a financial
+eligibility decision. A successful OCPP remote-start response generally means
+the charge point accepted a command; it is not proof that a transaction started,
+the cable remained connected, or energy was delivered. Starting first would
+create unrecoverable exposure when the driver has insufficient funds, the card
+is declined, a payment method requires SCA, or the provider is unavailable.
+
+For an upfront card-funded charging rail, the selected route must explicitly
+support separate authorization and capture, or another approved equivalent
+reservation model. A provider/method that auto-captures and cannot safely
+reverse or reconcile the result is not eligible for this flow; route resolution
+must fail before the OCPP command rather than silently charging first.
+
+The required model is a compensating saga, with separate financial and physical
+states:
+
+```text
+1. Freeze a price/tax/surcharge/cap quote and resolve the payment route.
+2. Authorize the card, reserve wallet funds, or obtain the selected rail's
+   equivalent eligible result. Do not send OCPP remote start unless eligible.
+3. Persist charging_start_attempt and an outbox command with a stable
+   correlation ID before sending the OCPP command.
+4. Receive command acceptance/rejection, but keep the intent in
+   START_CONFIRMATION_PENDING.
+5. Correlate an actual transaction-start event plus connector status and, where
+   available, the first valid meter value. Only then mark physical start
+   confirmed and continue charging.
+6. If start is rejected, times out, or is verified not to have begun, run the
+   idempotent compensation action: void/release an uncaptured card hold or
+   release the wallet reservation.
+7. If payment was already captured by provider behavior or a race, create an
+   idempotent refund instead of trying to void an already captured payment.
+```
+
+```mermaid
+sequenceDiagram
+    participant S as session-service
+    participant P as payment-service
+    participant G as payment-gateway-service
+    participant O as OCPP service
+    participant C as Charge point
+
+    S->>P: Authorize eligible payment rail
+    P->>G: Authorize or reserve
+    G-->>P: AUTHORIZED / reserved
+    P-->>S: Start eligible with intent ID
+    S->>S: Persist start attempt + outbox correlation ID
+    S->>O: RemoteStartTransaction(correlation ID)
+    O->>C: OCPP remote start command
+    C-->>O: Accepted/rejected command result
+    alt Rejected or start never materializes
+        O-->>S: Rejected or confirmation timeout
+        S->>P: Request compensation with start-attempt ID
+        P->>G: Void authorization or release reserve
+        G-->>P: Void/release outcome
+        P-->>S: START_FAILED_PAYMENT_RELEASED
+    else Physical transaction starts
+        C-->>O: Transaction started + status/meter evidence
+        O-->>S: Correlated physical-start confirmed
+        S->>P: Mark intent CHARGING
+    end
+```
+
+The OCPP correlation is immutable and must include the session, charge point,
+connector, command correlation ID, and transaction reference once available.
+The existing connector Redis state is a fast correlation aid, not the financial
+source of truth. `charging_start_attempt` and the transactional outbox remain
+the recovery source after a Redis eviction, pod restart, or delayed event.
+
+#### Start Confirmation Timeout And Unknown State
+
+`start_confirmation_timeout_seconds` is a versioned operational policy, scoped
+to the charger/network capability rather than hard-coded in the mobile app. The
+initial pilot value should be calibrated between 90 and 180 seconds; the current
+five-minute generic start-attempt timeout is a fallback only and must not be
+used as evidence that charging failed.
+
+Before releasing money at timeout, `session-service` must make a bounded,
+correlated state inquiry using the OCPP transaction state, connector state, and
+known meter/session facts:
+
+| Observation | Required action |
+| --- | --- |
+| Command rejected and no transaction start | Void/release immediately. |
+| Command accepted, no start event, connector definitively available/no transaction | Void/release immediately. |
+| Transaction start or positive meter evidence appears late | Mark `CHARGING`; do not release the financial authorization. |
+| State cannot be proven because of a transport or charger outage | Mark `START_CONFIRMATION_UNKNOWN`, retry bounded inquiry, and do not blindly release. If physical start is later proved, send controlled stop if financial coverage is no longer valid, then rate and reconcile. |
+| Provider request timed out | Query the provider with the original idempotency key before retrying, releasing, or sending a second OCPP command. |
+
+This avoids the dangerous race where the platform releases a hold after an
+apparent timeout while the charger begins a delayed session. All compensation
+actions are keyed by `payment_intent_id`, `start_attempt_id`, and a stable
+operation idempotency key.
+
+### 9.2.2 Early Hardware Failure, Release, And Refund Policy
+
+An early hardware failure is not the same as a driver-initiated cancellation.
+The policy is frozen on the payment intent and should be configurable at the
+price-plan/merchant policy level, with a stricter connector override only where
+contractually required:
+
+```text
+start_confirmation_timeout_seconds
+early_failure_grace_seconds
+minimum_billable_energy_wh
+hardware_fault_waiver_enabled
+waive_session_fee_on_early_hardware_fault
+waive_time_fee_on_early_hardware_fault
+refund_reason_policy_version
+```
+
+`early_failure_grace_seconds` may initially be configured as 60 seconds, but it
+is not a universal refund rule. The outcome depends on verified charger facts,
+metered energy, tariff disclosure, and the failure cause:
+
+| Scenario | Financial result |
+| --- | --- |
+| Card/wallet eligibility fails before remote start | No OCPP start command; no hold/reservation. |
+| Charger rejects remote start or never physically starts | Full void of the uncaptured authorization or release of the wallet reservation. No refund record, no charge, and no session fee. |
+| Physical start, hardware/OCPP fault within the grace period, zero billable energy | Default policy: void/release the uncaptured reserve and waive charging, time, and session fees. If a capture already occurred, create a full refund and credit note. |
+| Physical start, hardware fault after some billable energy | Capture only the server-rated delivered-energy/allowed tariff amount and automatically release the remainder. A merchant may configure an additional goodwill waiver, but it must be explicit and auditable. |
+| Driver stops or unplugs after a valid start | Apply the disclosed tariff to actual billable consumption; do not grant an automatic hardware-fault waiver. |
+| Provider auto-captured or capture/webhook races with a release action | Query provider state; refund captured money or release only the still-uncaptured amount. Never issue both for the same amount. |
+
+The driver-facing status distinguishes a hold from a refund:
+
+- **Authorization released**: no money was captured. ElectraHub has canceled
+  the authorization/reservation; the issuer may still show a pending entry until
+  its own release window completes.
+- **Refund pending/completed**: money was captured. ElectraHub has created an
+  idempotent refund, recorded a credit ledger entry and tax correction/credit
+  note, and waits for provider confirmation.
+- **Payment investigation required**: physical and provider state remain
+  ambiguous. The session is not represented as paid or refunded until the
+  reconciliation worker resolves it.
+
+For wallet-funded sessions, an unsuccessful start releases the wallet reserve
+atomically. A later refund after wallet settlement is a new immutable credit
+entry; it is not a mutation of the original debit. For card-present, terminal
+and PSP states decide whether to cancel a pre-authorization or refund a captured
+payment. For PnC/RFID roaming, the equivalent correction is a CDR/contract
+credit workflow rather than an assumption that a retail-card refund exists.
 
 ### 9.3 Authorization Reserve And Charging Cap
 
@@ -731,6 +911,9 @@ During charging:
 5. The final capture amount is never greater than provider-confirmed capturable
    amount unless the chosen provider explicitly supports a configured
    over-capture policy and the CPO/legal policy permits it.
+6. If the physical session ends before any billable delivery, the early-failure
+   compensation policy in section 9.2.2 decides whether to void/release or
+   refund. A UI timer or a local app estimate must never make that decision.
 
 Provider differences matter. Stripe supports manual capture on eligible payment
 methods. Mollie documents manual capture for supported methods but does not
@@ -846,8 +1029,16 @@ payment.gateway.authorization.adjusted.v1
 payment.gateway.authorization.expired.v1
 payment.gateway.capture.succeeded.v1
 payment.gateway.capture.failed.v1
+payment.gateway.void.requested.v1
 payment.gateway.void.succeeded.v1
+payment.gateway.void.failed.v1
+payment.gateway.refund.requested.v1
 payment.gateway.refund.succeeded.v1
+payment.gateway.refund.failed.v1
+charging.start.command.rejected.v1
+charging.start.confirmed.v1
+charging.start.confirmation-timeout.v1
+charging.early-failure.detected.v1
 payment.gateway.webhook.failed.v1
 payment.gateway.reconciliation.exception.v1
 payment.gateway.payout.reported.v1
@@ -965,6 +1156,15 @@ the demo environment but is required by the target architecture.
   means a payment failed.
 - Maintain a dead-letter queue for normalization/reconciliation failures and a
   human-operable exception queue.
+- Run a compensating-action worker for rejected, timed-out, and early-failed
+  starts. It must query the provider and the correlated charger state before
+  deciding between void, refund, or controlled stop-and-reconcile.
+- Record a release/void as pending until the provider result or signed webhook
+  confirms it. Do not tell a driver that funds are instantly available again;
+  the issuer can display an authorization for longer than the PSP action.
+- Reconcile all `START_CONFIRMATION_UNKNOWN`, `VOID_PENDING`, `REFUND_PENDING`,
+  and capture-after-fault cases until they reach a terminal state or a staffed
+  exception queue.
 - Maintain a capture-before-expiry job driven by each authorization's provider
   `expires_at`, not a static global duration.
 - Keep retired provider connections accessible for capture, void, refund, and
@@ -978,12 +1178,21 @@ the demo environment but is required by the target architecture.
   configuration reads during capture or refund.
 - Keep live authorization call paths short: session -> payment -> gateway ->
   provider. UI tokenization goes directly to the provider SDK where possible.
+- Register the OCPP start correlation before publishing the remote-start outbox
+  command. Use one bounded connector/session lookup on timeout, not polling
+  every service or repeatedly querying the PSP from the request thread.
+- Persist compensation state before invoking a provider. Redis may accelerate
+  connector lookup and deduplication, but PostgreSQL plus outbox is the durable
+  source for payment recovery.
 - Run reconciliation, report import, retry recovery, and analytics
   asynchronously.
 - Emit low-cardinality metrics. Do not use driver/card/provider transaction IDs
   as metric labels.
 - Track p50/p95/p99 route resolution, authorization, adjustment, capture,
   webhook lag, and reconciliation latency by provider/country/method.
+- Track authorization-to-physical-start latency, start failures after
+  authorization, stale holds, void/refund completion latency, early hardware
+  fault rate by charger/firmware, and capture failures after delivered energy.
 
 ## 14. Tax, Surcharge, And Fee Acceptance Tests
 
@@ -996,6 +1205,15 @@ the demo environment but is required by the target architecture.
 | Provider fee changes after capture | CPO payout/reconciliation changes; driver receipt remains unchanged unless the explicit surcharge was part of original quote. |
 | Tax rate changes during an active session | Start snapshot/final policy rules apply deterministically and are recorded; no retroactive mutation. |
 | Subscription discount | Discount policy is applied before tax/surcharge according to the configured jurisdiction rule and is visible as a separate line. |
+| Card authorized, OCPP remote start rejected | Exactly one authorization void/release; no charging session, capture, session fee, or refund record. |
+| OCPP accepted but no physical start by confirmation deadline | Bounded correlated inquiry, then exactly one void/release only when no transaction is proven. |
+| Late transaction start after timeout | No blind release; mark unknown, reconcile physical state, then rate or controlled-stop before any financial compensation. |
+| Hardware fault within early-failure grace, zero billable energy | Full uncaptured hold release; if capture raced, exactly one full refund and credit note. |
+| Hardware fault after metered delivery | Capture only the immutable backend-rated amount; release unused reserve and apply configured waiver only when eligible. |
+| Driver cancels a valid session | Rate actual consumption under tariff; no automatic hardware-fault refund. |
+| Duplicate OCPP event, retry, or webhook | One start attempt, one compensation/capture/refund per idempotency key. |
+| Wallet reserve on failed start | Atomic reserve release with no negative balance or duplicate credit. |
+| Card-present preauthorization/capture | Adapter chooses cancel before capture or refund after capture; terminal never exposes PAN/CVV to ElectraHub. |
 | Session reaches cap | Server stops or holds according to cap/reserve policy; no UI-side business calculation. |
 
 ## 15. Migration Plan
@@ -1032,6 +1250,9 @@ the demo environment but is required by the target architecture.
 4. Add mock scenarios for approval, decline, SCA action, timeout, duplicate
    webhook, delayed capture, capture failure, refund, settlement report, and
    payout report.
+5. Add the `charging_start_attempt` and `payment_recovery_action` saga with
+   deterministic OCPP correlation, provider inquiry, void/release, and refund
+   paths before enabling any real adapter.
 
 ### Phase 3: Pricing Tax/Surcharge Contract
 
@@ -1051,6 +1272,9 @@ the demo environment but is required by the target architecture.
    capture, provider callback, receipt state, refund, and reconciliation.
 4. Use mock gateway for load testing; keep live/sandbox PSP contract tests low
    volume and provider-approved.
+5. Exercise rejected start, no-start timeout, late transaction start, early
+   charger fault with zero/some metered energy, duplicate event, provider timeout,
+   and captured-payment refund paths in contract and regression suites.
 
 ### Phase 5: First Controlled Production Pilot
 
@@ -1083,17 +1307,23 @@ following are true:
 4. The selected provider authorization is confirmed before OCPP remote start.
 5. Final server-side quote is captured exactly once with provider idempotency.
 6. Capture/void/refund/status/webhook flows are fully idempotent and recoverable.
-7. Charging currency, CPO settlement currency, and driver statement currency
+7. A remote-start acknowledgement alone cannot mark a payment intent charging;
+   physical-start correlation and durable recovery are verified.
+8. Failed or early-fault sessions void/release uncaptured holds, while captured
+   funds use an idempotent refund and credit-note path.
+9. Driver-initiated cancellation is distinguishable from verified charger fault
+   in the immutable rating and compensation policy.
+10. Charging currency, CPO settlement currency, and driver statement currency
    are modelled separately.
-8. Tax/surcharge lines are rate-versioned, disclosed where allowed, and
+11. Tax/surcharge lines are rate-versioned, disclosed where allowed, and
    immutable on the receipt.
-9. Payment receipts show a safe ElectraHub transaction ID, not provider/acquirer
+12. Payment receipts show a safe ElectraHub transaction ID, not provider/acquirer
    secret/internal identifiers.
-10. Daily reconciliation demonstrates provider transactions and payout records
+13. Daily reconciliation demonstrates provider transactions and payout records
     match the internal ledger or appear as an accountable exception.
-11. System admin sees configuration health and audit data without seeing any
+14. System admin sees configuration health and audit data without seeing any
     secret or driver token.
-12. JMeter regression runs through the mock gateway and provider sandbox tests
+15. JMeter regression runs through the mock gateway and provider sandbox tests
     pass for the selected adapter.
 
 ## 17. Open Decisions
@@ -1115,6 +1345,10 @@ following are true:
 
 - Stripe manual authorization/capture and hold lifecycle:
   https://docs.stripe.com/payments/place-a-hold-on-a-payment-method
+- Stripe refund API and partial-refund semantics:
+  https://docs.stripe.com/api/refunds/create
+- Stripe Terminal cancel-before-capture versus refund-after-capture:
+  https://docs.stripe.com/terminal/features/refunds
 - Stripe Connect currencies and presentment/settlement FX:
   https://docs.stripe.com/connect/currencies
 - Stripe connected-account payment method use:
@@ -1123,6 +1357,9 @@ following are true:
   extension: https://docs.mollie.com/docs/place-a-hold-for-a-payment
 - Adyen pre-authorization and adjustment constraints:
   https://docs.adyen.com/online-payments/adjust-authorisation/adjust-with-preauth/
+- Adyen cancel-before-capture and refund-after-capture behavior:
+  https://docs.adyen.com/online-payments/cancel
+  https://docs.adyen.com/online-payments/refund/
 - Razorpay capture API:
   https://razorpay.com/docs/api/payments/capture/
 - European Commission payment-services overview and card surcharge ban context:
