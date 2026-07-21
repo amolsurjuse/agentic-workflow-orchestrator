@@ -65,13 +65,25 @@ Each mutation increments the route or connection configuration version where rel
 
 ## Administrative UI
 
-`admin-portal-ui` now has a system-admin-only, feature-flagged Payment Gateways workspace. It includes vertically scoped tabs for:
+`admin-portal-ui` now has a system-admin-only, feature-flagged **System Configuration > Payment Configuration** workspace. It includes vertically scoped tabs for:
 
 1. Connections: provider, environment, endpoint profile, and secret references only;
 2. Merchant accounts: legal entity, enterprise/network scope, merchant country, settlement currency, and allowed presentment currencies;
 3. Payment routes: charging country, billing currency, settlement currency, channel, payment method, priority, validity window, and required provider capabilities.
 
-No secret value, API key, card number, provider token, or provider transaction reference is rendered in the UI. Only secret references and configuration health are visible.
+No secret value, API key, card number, provider token, provider transaction reference, or secret-manager reference is returned by the read API or rendered in the UI. The configuration snapshot exposes only safe state such as provider, environment, endpoint profile, capabilities, configured/not-configured indicators, validation status, and version.
+
+### Safe Configuration Management
+
+The system-admin API is deliberately separate from runtime payment APIs and is protected twice: the API gateway requires `SYSTEM_ADMIN`, and `payment-gateway-service` verifies the signed administrative access context before executing every endpoint.
+
+| Resource | Read | Edit policy | Secret handling |
+| --- | --- | --- | --- |
+| Gateway connection | Safe configuration snapshot | Disable, edit endpoint profile or write-only references, then validate and activate | Raw values and secret references never return; blank update fields retain the configured secret reference. |
+| Merchant account | Settlement scope, country, currencies, status | Disable before editing settlement metadata; connection and enterprise/network scope remain immutable for audit integrity | No gateway credential or payment data exists on this model. |
+| Payment route | Market, currency, channel, payment method, capabilities, priority, status | Disable before editing, then explicitly enable after review. Enable revalidates the active merchant connection, settlement currency, capability set, and effective period. | No driver/card/provider token exists on this model. |
+
+Every edit uses the resource `configurationVersion`. The write compares that version in the database and rejects a stale edit instead of silently overwriting another administrator's change. Each mutation is audited and invalidates route-resolution caches.
 
 The UI provides loading, empty, error, and action-in-progress states. It deliberately does not enable the feature in the deployed admin portal yet.
 
