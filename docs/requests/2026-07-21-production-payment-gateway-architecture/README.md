@@ -1,6 +1,6 @@
 # Production Payment Gateway Architecture
 
-Status: Proposed architecture
+Status: Implementation in progress; live provider activation is intentionally blocked pending tokenization, a selected PSP sandbox, and deployment infrastructure.
 
 Date: 2026-07-21
 
