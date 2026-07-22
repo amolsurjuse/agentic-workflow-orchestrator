@@ -43,6 +43,12 @@ SGD 50.
 - **Global search** uses `ocpiChargers(search: ...)` without device latitude or
   longitude. A driver in the United States can search for `Pune`, `Mumbai`,
   `Singapore`, a charger ID, or a connector ID and receive the correct result.
+- **Regional browse** on iOS exposes an **Explore** menu in the map navigation
+  bar. It switches the map to an explicit Europe or Asia market set, fits the
+  camera to the returned stations, and refreshes that same market without a
+  device-location filter. Returning to **Nearby** restores GPS-scoped
+  discovery. A delayed GPS update must never overwrite a user's selected
+  market.
 - Driver result cards display the street address, city, and ISO country code so
   similarly named locations are distinguishable.
 - iOS and Android both use the same GraphQL contract. The web driver portal has
@@ -86,5 +92,9 @@ query {
 Expected result: five Singapore chargers, with a live OCPP status after the
 simulator reconciliation loop has run.
 
-On iOS and Android, search `Pune`, select a result, and confirm the map centers
-on the station and shows INR pricing. Repeat with `Singapore` and confirm SGD.
+On iOS, open **Explore > Asia** and verify that Pune, New Delhi, Bengaluru,
+Mumbai, and Singapore stations appear without changing the device location.
+Open **Explore > Europe** and verify that the European demo locations appear.
+Return to **Explore > Nearby** and verify that GPS-scoped discovery resumes.
+On Android, search `Pune`, select a result, and confirm the map centers on the
+station and shows INR pricing. Repeat with `Singapore` and confirm SGD.
