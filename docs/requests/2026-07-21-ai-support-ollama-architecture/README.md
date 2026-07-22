@@ -56,7 +56,24 @@ The local bootstrap script and Modelfile now both use `qwen3:8b`. The local mode
 
 The runner `scripts/ollama/evaluate-sparky-prompts.ps1 -FailOnQualityIssue` checks the real local model. Its service mode additionally checks the final answer returned by `ai-support-service`, after deterministic grounding and the response-quality guard, for required operational meaning, prohibited prompt leakage, and a minimum useful answer length.
 
-On July 21, 2026, all 41 cases passed against `electrahub-sparky:8b`. Measured full-response latency on the CPU-only local host was 5.466-13.874 seconds per case, averaging 9.283 seconds. This is a quality improvement, not a two-second latency result; a future GPU benchmark or smaller retrieved model is still required for a stricter interactive SLA.
+On July 21-22, 2026, the final release evaluation passed all **41/41** cases against `electrahub-sparky:8b`. Measured full-response latency on the CPU-only local host was 7.038-15.912 seconds per case, averaging 10.660 seconds. This is a quality improvement, not a two-second latency result; a future GPU benchmark or smaller retrieved model is still required for a stricter interactive SLA.
+
+The release suite specifically verifies the driver, admin, simulator, payment, subscription, RBAC, and notification prompt categories. It also rejects prompt/reasoning leakage, invented analytics or live states, incorrect credit-card authorization reversal, transaction IDs on explicit `Available`, and cross-operator data exposure.
+
+### Production release verification
+
+The final release was built by TeamCity as `ElectraHub_AiSupportService_Build #9` and promoted through Argo CD as `amolsurjuse/ai-support-service:9`.
+
+The production pod was verified with:
+
+- `AI_PROVIDER=ollama`
+- `AI_MODEL=electrahub-sparky:8b`
+- `AI_TEMPERATURE=0.12`
+- `AI_MAX_OUTPUT_TOKENS=320`
+- `AI_LLM_TIMEOUT_MS=30000`
+- bounded diagnostic timeouts of 1.8 seconds per dependency and 3 seconds overall
+
+Live production requests confirmed meaningful answers for all three previously high-risk paths: failed credit-card remote start explains hold, reversal, capture, and refund boundaries; explicit `Available` excludes a transaction ID; and a location administrator is confined to assigned data while parent scope is read-only.
 
 ### Implemented answer path
 
